@@ -28,31 +28,41 @@
 </script>
 <!-- ===== [v14 / 2-3] 로그인·회원가입 게이트 스타일 (추가만, 기존 테마 불변) ===== -->
 <style id="login-gate-css">
+/* B-2: v35 auth 화면 구조 + Executive Light 색 (게이트 전용, 기존 테마 불변) */
 #loginGate{position:fixed;inset:0;z-index:99999;display:flex;align-items:center;justify-content:center;
-  background:linear-gradient(135deg,#0f172a,#1e293b);padding:20px;overflow:auto;}
+  background:linear-gradient(135deg,#1e293b 0%,#0f172a 100%);padding:20px;overflow-y:auto;}
 #loginGate.hidden{display:none;}
-#loginGate .lg-card{width:360px;max-width:92vw;background:#fff;border-radius:16px;padding:28px 26px;
-  box-shadow:0 20px 60px rgba(0,0,0,.45);margin:auto;}
-#loginGate .lg-brand{text-align:center;margin-bottom:20px;}
-#loginGate .lg-brand h1{font-size:20px;font-weight:800;color:#0f172a;margin:0;letter-spacing:-.01em;}
-#loginGate .lg-brand p{font-size:12px;color:#64748b;margin:5px 0 0;}
-#loginGate .lg-field{margin-bottom:11px;}
-#loginGate .lg-field label{display:block;font-size:12px;font-weight:700;color:#475569;margin-bottom:5px;}
-#loginGate .lg-field .opt{font-weight:500;color:#94a3b8;}
-#loginGate .lg-field input,#loginGate .lg-field select{width:100%;box-sizing:border-box;border:1px solid #cbd5e1;
-  border-radius:9px;padding:11px 12px;font-size:14px;color:#0f172a;background:#fff;}
-#loginGate .lg-field input:focus,#loginGate .lg-field select:focus{outline:none;border-color:#2f6df0;
-  box-shadow:0 0 0 3px rgba(47,109,240,.15);}
-#loginGate .lg-btn{width:100%;border:none;border-radius:9px;padding:12px;background:#0f172a;color:#fff;
-  font-size:14px;font-weight:700;cursor:pointer;margin-top:8px;}
-#loginGate .lg-btn:disabled{opacity:.6;cursor:default;}
-#loginGate .lg-err{min-height:18px;font-size:12.5px;color:#dc2626;margin-top:9px;text-align:center;
-  white-space:pre-line;line-height:1.5;}
-#loginGate .lg-err.ok{color:#0f9d6b;}
-#loginGate .lg-note{font-size:11px;color:#94a3b8;text-align:center;margin-top:12px;line-height:1.5;}
-#loginGate .lg-switch{text-align:center;margin-top:14px;font-size:12.5px;color:#64748b;}
-#loginGate .lg-switch a{color:#2f6df0;font-weight:700;cursor:pointer;text-decoration:none;}
-#loginGate .lg-switch a:hover{text-decoration:underline;}
+#loginGate .auth-box{background:#fff;border-radius:20px;padding:34px 30px;width:100%;max-width:420px;margin:auto;
+  box-shadow:0 25px 50px -12px rgba(15,23,42,.45);}
+#loginGate .auth-brand{width:56px;height:56px;border-radius:15px;margin:0 auto 14px;display:flex;align-items:center;
+  justify-content:center;background:linear-gradient(135deg,#1e2a44,#0f172a);color:#fff;font-size:23px;
+  box-shadow:0 8px 20px rgba(15,23,42,.28);}
+#loginGate .auth-title{font-size:21px;color:#0f172a;text-align:center;margin:0 0 4px;letter-spacing:-.02em;font-weight:800;}
+#loginGate .auth-title i{margin-right:8px;color:#1e2a44;}
+#loginGate .auth-version{text-align:center;font-size:12.5px;color:#64748b;margin-bottom:3px;font-weight:600;}
+#loginGate .auth-credit{text-align:center;font-size:11px;color:#94a3b8;margin-bottom:22px;font-style:italic;letter-spacing:.04em;}
+#loginGate .auth-input{width:100%;box-sizing:border-box;padding:12px 14px;border:1.5px solid #cbd5e1;border-radius:10px;
+  font-size:14px;margin-bottom:11px;font-family:inherit;color:#0f172a;background:#fff;transition:.15s;}
+#loginGate .auth-input:focus{outline:none;border-color:#2563eb;box-shadow:0 0 0 3px rgba(37,99,235,.15);}
+#loginGate .auth-btn{width:100%;padding:13px;border:none;border-radius:10px;font-size:15px;font-weight:700;
+  cursor:pointer;transition:.15s;font-family:inherit;margin-bottom:8px;
+  background:linear-gradient(135deg,#1e2a44,#0f172a);color:#fff;}
+#loginGate .auth-btn:hover{transform:translateY(-1px);box-shadow:0 8px 20px rgba(15,23,42,.3);}
+#loginGate .auth-btn:disabled{background:#94a3b8;cursor:default;transform:none;box-shadow:none;}
+#loginGate .auth-link{text-align:center;font-size:13px;color:#2563eb;cursor:pointer;padding:7px;text-decoration:none;display:block;}
+#loginGate .auth-link:hover{text-decoration:underline;}
+#loginGate .auth-msg{padding:11px 12px;border-radius:8px;margin-bottom:11px;font-size:13px;display:none;
+  white-space:pre-line;line-height:1.55;word-break:keep-all;}
+#loginGate .auth-msg.show{display:block;}
+#loginGate .auth-msg.error{background:#fef2f2;color:#991b1b;border:1px solid #fecaca;}
+#loginGate .auth-msg.success{background:#d1fae5;color:#064e3b;border:1px solid #a7f3d0;}
+#loginGate .auth-msg.info{background:#dbeafe;color:#1e3a8a;border:1px solid #bfdbfe;}
+#loginGate .auth-screen{display:block;}
+#loginGate .auth-screen.hidden{display:none;}
+#loginGate .auth-notice{background:#fef2f2;border:1.5px solid #fca5a5;padding:11px 13px;border-radius:8px;
+  font-size:12px;color:#991b1b;margin:2px 0 11px;line-height:1.6;font-weight:600;}
+#loginGate .auth-info{background:#dbeafe;border:1px solid #bfdbfe;padding:10px 12px;border-radius:8px;
+  font-size:12px;color:#1e3a8a;margin:2px 0 11px;line-height:1.5;}
 #logoutBtn{position:fixed;top:10px;left:10px;z-index:9998;display:none;border:1px solid #cbd5e1;background:#fff;
   color:#475569;border-radius:8px;padding:6px 10px;font-size:12px;font-weight:700;cursor:pointer;
   box-shadow:0 2px 8px rgba(0,0,0,.08);}
@@ -1325,50 +1335,85 @@ renderAll();
 updateTeamBtn();
 </script>
 
-<!-- ===== [v14 / 2-3] 로그인·회원가입 게이트 markup (추가만) ===== -->
+<!-- ===== [v17 / B-2] v35 로그인·가입·비번문의 3화면 (구조 그대로 + Executive Light + 팀 선택) ===== -->
 <div id="loginGate">
-  <div class="lg-card">
-    <div class="lg-brand"><h1>DB PRO MASTER</h1><p>통합 대시보드 · 연습 금고(db-pro-test)</p></div>
 
-    <!-- 로그인 화면 -->
-    <div id="lgLogin">
-      <div class="lg-field"><label>전화번호</label>
-        <input id="lgPhone" type="tel" inputmode="numeric" placeholder="01011111111" autocomplete="username"></div>
-      <div class="lg-field"><label>비밀번호</label>
-        <input id="lgPw" type="password" placeholder="비밀번호" autocomplete="current-password"></div>
-      <button class="lg-btn" id="lgBtn">로그인</button>
-      <div class="lg-err" id="lgErr"></div>
-      <div class="lg-switch">처음이신가요? <a id="toSignup">회원가입 →</a></div>
+  <!-- 로그인 화면 -->
+  <div id="login-screen" class="auth-screen">
+    <div class="auth-box">
+      <div class="auth-brand"><i class="fa-solid fa-server"></i></div>
+      <h2 class="auth-title"><i class="fa-solid fa-server"></i>DB Pro Master</h2>
+      <div class="auth-version">통합 대시보드</div>
+      <div class="auth-credit">Developed by. Jihoon Kim</div>
+
+      <input type="tel" id="login-phone" class="auth-input"
+        placeholder="휴대폰 번호 (예: 010-1234-5678)" autocomplete="tel" inputmode="numeric" maxlength="13">
+      <input type="password" id="login-pw" class="auth-input"
+        placeholder="비밀번호" autocomplete="current-password">
+      <div id="login-msg" class="auth-msg"></div>
+      <button class="auth-btn" id="btn-login"><i class="fa-solid fa-right-to-bracket"></i>&nbsp; 로그인</button>
+      <a class="auth-link" id="link-to-signup">처음이신가요? 회원가입 &rarr;</a>
+      <a class="auth-link" id="link-to-forgot">비밀번호를 잊으셨나요?</a>
     </div>
-
-    <!-- 회원가입 화면 -->
-    <div id="lgSignup" style="display:none">
-      <div class="lg-field"><label>이름</label>
-        <input id="suName" type="text" placeholder="이름 (저장된 이름과 정확히 일치)" autocomplete="name"></div>
-      <div class="lg-field"><label>전화번호</label>
-        <input id="suPhone" type="tel" inputmode="numeric" placeholder="010-1234-5678" autocomplete="tel"></div>
-      <div class="lg-field"><label>소속 팀</label>
-        <select id="suTeam">
-          <option value="">팀 선택</option>
-          <option value="1팀">1팀</option>
-          <option value="2팀">2팀</option>
-          <option value="3팀">3팀</option>
-          <option value="4팀">4팀</option>
-        </select>
-      </div>
-      <div class="lg-field"><label>도입자 <span class="opt">(선택)</span></label>
-        <input id="suRef" type="text" placeholder="도입자 이름 (없으면 비움)" autocomplete="off"></div>
-      <div class="lg-field"><label>비밀번호</label>
-        <input id="suPw" type="password" placeholder="영문·숫자 6자 이상" autocomplete="new-password"></div>
-      <div class="lg-field"><label>비밀번호 확인</label>
-        <input id="suPw2" type="password" placeholder="비밀번호 다시 입력" autocomplete="new-password"></div>
-      <button class="lg-btn" id="suBtn">가입 신청</button>
-      <div class="lg-err" id="suErr"></div>
-      <div class="lg-note">가입 신청 후 <b>담당 팀 매니저(SM) 승인</b>이 완료되어야 로그인할 수 있습니다.</div>
-      <div class="lg-switch"><a id="toLogin">← 로그인 화면으로</a></div>
-    </div>
-
   </div>
+
+  <!-- 회원가입 화면 (v35 구조 + 소속 팀 선택 추가) -->
+  <div id="signup-screen" class="auth-screen hidden">
+    <div class="auth-box">
+      <div class="auth-brand"><i class="fa-solid fa-user-plus"></i></div>
+      <h2 class="auth-title"><i class="fa-solid fa-user-plus"></i>회원가입</h2>
+      <div class="auth-version">통합 대시보드</div>
+      <div class="auth-credit" style="margin-bottom:22px">팀원 가입 신청</div>
+
+      <div id="signup-msg" class="auth-msg"></div>
+      <input type="text" id="signup-name" class="auth-input"
+        placeholder="이름 (띄어쓰기 없이 정확히 입력)" autocomplete="name">
+      <input type="tel" id="signup-phone" class="auth-input"
+        placeholder="휴대폰 번호 (예: 010-1234-5678)" autocomplete="tel" inputmode="numeric" maxlength="13">
+      <select id="signup-team" class="auth-input">
+        <option value="">소속 팀 선택</option>
+        <option value="1팀">1팀</option>
+        <option value="2팀">2팀</option>
+        <option value="3팀">3팀</option>
+        <option value="4팀">4팀</option>
+      </select>
+      <input type="text" id="signup-referrer" class="auth-input"
+        placeholder="도입자 이름 (없으면 pass)" autocomplete="off">
+      <input type="password" id="signup-pw" class="auth-input"
+        placeholder="비밀번호 (영문·숫자 6자 이상)" autocomplete="new-password" minlength="6">
+      <input type="password" id="signup-pw2" class="auth-input"
+        placeholder="비밀번호 확인" autocomplete="new-password">
+
+      <div class="auth-notice">
+        &#9888;&#65039; <b>중요 안내</b><br>
+        &bull; 가입 신청 후 <b>매니저 승인이 완료되어야</b> 로그인 가능합니다.<br>
+        &bull; <b>기존 사용자는 저장된 이름과 정확히 일치</b>해야 데이터가 자동 연결됩니다.<br>
+        &bull; 이름이 다르면 신규 사용자로 등록됩니다.
+      </div>
+
+      <button class="auth-btn" id="btn-signup"><i class="fa-solid fa-paper-plane"></i>&nbsp; 가입 신청</button>
+      <a class="auth-link" id="link-signup-to-login">&larr; 로그인 화면으로</a>
+    </div>
+  </div>
+
+  <!-- 비밀번호 문의 화면 (v35 구조) -->
+  <div id="forgot-screen" class="auth-screen hidden">
+    <div class="auth-box">
+      <div class="auth-brand"><i class="fa-solid fa-key"></i></div>
+      <h2 class="auth-title"><i class="fa-solid fa-key"></i>비밀번호 문의</h2>
+      <div class="auth-version">통합 대시보드</div>
+      <div class="auth-credit" style="margin-bottom:22px">계정 비밀번호 재설정</div>
+
+      <div id="forgot-msg" class="auth-msg"></div>
+      <input type="text" id="forgot-name" class="auth-input" placeholder="이름" autocomplete="name">
+      <input type="tel" id="forgot-phone" class="auth-input"
+        placeholder="가입 시 입력한 휴대폰 번호" autocomplete="tel" inputmode="numeric" maxlength="13">
+      <div class="auth-info"><i class="fa-solid fa-circle-info"></i>&nbsp; 본인 확인 후 담당 매니저(SM)가 임시 비밀번호를 알려드립니다.</div>
+      <button class="auth-btn" id="btn-forgot"><i class="fa-solid fa-paper-plane"></i>&nbsp; 비번 재설정 요청</button>
+      <a class="auth-link" id="link-forgot-to-login">&larr; 로그인 화면으로</a>
+    </div>
+  </div>
+
 </div>
 <button id="logoutBtn">로그아웃</button>
 
@@ -1376,32 +1421,46 @@ updateTeamBtn();
 <script id="login-engine">
 (function(){
   var sb = window.sbClient;
-  var gate     = document.getElementById('loginGate');
-  var loginBox = document.getElementById('lgLogin');
-  var signupBox= document.getElementById('lgSignup');
-  var logoutBtn= document.getElementById('logoutBtn');
-  // 로그인 요소
-  var phoneIn = document.getElementById('lgPhone'), pwIn = document.getElementById('lgPw');
-  var btn = document.getElementById('lgBtn'), errEl = document.getElementById('lgErr');
-  // 회원가입 요소
-  var sName=document.getElementById('suName'), sPhone=document.getElementById('suPhone'),
-      sTeam=document.getElementById('suTeam'), sRef=document.getElementById('suRef'),
-      sPw=document.getElementById('suPw'), sPw2=document.getElementById('suPw2'),
-      sBtn=document.getElementById('suBtn'), sErr=document.getElementById('suErr');
+  var gate      = document.getElementById('loginGate');
+  var loginScr  = document.getElementById('login-screen');
+  var signupScr = document.getElementById('signup-screen');
+  var forgotScr = document.getElementById('forgot-screen');
+  var logoutBtn = document.getElementById('logoutBtn');
+  // 로그인 요소 (v35 ID)
+  var phoneIn = document.getElementById('login-phone'), pwIn = document.getElementById('login-pw');
+  var btnLogin = document.getElementById('btn-login'), loginMsg = document.getElementById('login-msg');
+  // 회원가입 요소 (v35 ID + 팀 선택)
+  var sName=document.getElementById('signup-name'), sPhone=document.getElementById('signup-phone'),
+      sTeam=document.getElementById('signup-team'), sRef=document.getElementById('signup-referrer'),
+      sPw=document.getElementById('signup-pw'), sPw2=document.getElementById('signup-pw2'),
+      btnSignup=document.getElementById('btn-signup'), signupMsg=document.getElementById('signup-msg');
+  // 비밀번호 문의 요소 (v35 ID)
+  var fName=document.getElementById('forgot-name'), fPhone=document.getElementById('forgot-phone'),
+      btnForgot=document.getElementById('btn-forgot'), forgotMsg=document.getElementById('forgot-msg');
 
   /* v35 동일: 숫자만 추출 / 전화번호 → 이메일 */
   function normalizePhone(p){ return String(p||'').replace(/[^0-9]/g,''); }
   function phoneToEmail(p){ return 'u' + normalizePhone(p) + '@dbpro.app'; }
   function hasKorean(s){ return /[\u3131-\u318E\uAC00-\uD7A3]/.test(s||''); }
 
+  /* v35 동일: .auth-msg 박스(show/error/success/info) */
+  function setMsg(el, text, type){
+    if(!el) return;
+    el.className = 'auth-msg' + (text ? (' show ' + (type||'error')) : '');
+    el.textContent = text || '';
+  }
   function showGate(){ gate.classList.remove('hidden'); logoutBtn.classList.remove('show'); }
   function hideGate(){ gate.classList.add('hidden');    logoutBtn.classList.add('show');    }
-  function showLogin(){ loginBox.style.display=''; signupBox.style.display='none'; setErr(''); }
-  function showSignup(){ loginBox.style.display='none'; signupBox.style.display=''; setSMsg(''); }
-  function setErr(m){ errEl.classList.remove('ok'); errEl.textContent = m||''; }
-  function setSMsg(m, ok){ sErr.classList.toggle('ok', !!ok); sErr.textContent = m||''; }
-  function busy(on){ btn.disabled=on; btn.textContent = on?'로그인 중…':'로그인'; }
-  function sBusy(on){ sBtn.disabled=on; sBtn.textContent = on?'가입 처리 중…':'가입 신청'; }
+  function showScreen(which){
+    loginScr.classList.toggle('hidden',  which!=='login');
+    signupScr.classList.toggle('hidden', which!=='signup');
+    forgotScr.classList.toggle('hidden', which!=='forgot');
+  }
+  function showLogin(){  showScreen('login');  setMsg(loginMsg,'');  }
+  function showSignup(){ showScreen('signup'); setMsg(signupMsg,''); }
+  function showForgot(){ showScreen('forgot'); setMsg(forgotMsg,''); }
+  function busy(on){  btnLogin.disabled=on;  btnLogin.innerHTML  = on?'로그인 중…'   :'<i class="fa-solid fa-right-to-bracket"></i>&nbsp; 로그인'; }
+  function sBusy(on){ btnSignup.disabled=on; btnSignup.innerHTML = on?'가입 처리 중…':'<i class="fa-solid fa-paper-plane"></i>&nbsp; 가입 신청'; }
 
   /* v35 동일: 영문 에러 → 한글 변환 */
   function translateError(e){
@@ -1415,9 +1474,8 @@ updateTeamBtn();
     return m;
   }
 
-  if(!sb){ setErr('서버 연결 모듈을 불러오지 못했습니다. 새로고침 해주세요.'); return; }
+  if(!sb){ setMsg(loginMsg,'서버 연결 모듈을 불러오지 못했습니다. 새로고침 해주세요.','error'); return; }
 
-  /* 로그인 성공 → 대시보드 진입(상단 표시 갱신) */
   /* [v16 / 2-4b] 오늘(KST) yyyy-mm-dd */
   function getTodayKST(){
     var now = new Date();
@@ -1433,16 +1491,16 @@ updateTeamBtn();
       var users = r.data || [];
       var teamMap = {'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'};
       var now = new Date();
-      var ym = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');   // 이번 달 yyyy-mm
+      var ym = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
       var head={t1:0,t2:0,t3:0,t4:0}, delta={t1:0,t2:0,t3:0,t4:0}, smByTeam={}, recruits=[];
       users.forEach(function(u){
         if(u.status !== 'approved') return;
         var tk = teamMap[u.team];
-        if(!tk) return;                                  // '전체'(관리자/BM) 제외
+        if(!tk) return;
         head[tk]++;
         if(u.role === 'team_manager') smByTeam[tk] = u.name;
         var joinedThisMonth = u.joined_at && String(u.joined_at).slice(0,7) === ym;
-        if(joinedThisMonth && u.is_new === true){        // 당월 신규입사자(신입)
+        if(joinedThisMonth && u.is_new === true){
           delta[tk]++;
           recruits.push({ name:u.name, ref:(u.referrer || '-'), team:tk });
         }
@@ -1470,11 +1528,10 @@ updateTeamBtn();
       var roleMap = {system_admin:'system_admin', branch_manager:'BM', team_manager:'SM', member:'member'};
       var teamMap = {'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'};
       var vRole = roleMap[me.role] || 'member';
-      var vTeam = teamMap[me.team] || 't1';   // '전체' 등은 t1 기본 (BM·관리자는 전팀 권한이라 무관)
+      var vTeam = teamMap[me.team] || 't1';
       if(window.DATA){
         window.DATA.role = vRole;
         window.DATA.curUserTeam = vTeam;
-        // 데모 직급 셀렉트 → 실제 권한으로 동기화 후 숨김 (임의 권한 변경 차단)
         var sel = document.getElementById('roleDemo');
         if(sel){ sel.value = vRole; var box = sel.closest('.demo-role'); if(box) box.style.display = 'none'; }
         try{ window.chartSel = [vTeam]; }catch(_e){}
@@ -1483,23 +1540,22 @@ updateTeamBtn();
       }
     }catch(e){ console.warn('[2-4a] 권한 반영 경고:', e && e.message); }
 
-    // 상단 표시는 실제 사용자로 (renderAll 이후 다시 세팅)
     var who = document.getElementById('whoName'); if(who) who.textContent = me.name || '';
     var roleKor = {system_admin:'시스템관리자', branch_manager:'BM(지점장)', team_manager:'SM', member:'팀원'};
     var teamKor = (me.team && me.team !== '전체') ? ' · ' + me.team : '';
     var wr = document.getElementById('whoRole'); if(wr) wr.textContent = (roleKor[me.role]||me.role) + teamKor + ' 권한 접속중';
     hideGate();
-    loadPeople();   /* [2-4b] 로그인 후 실데이터로 신규입사자/팀별 인원 반영 */
+    loadPeople();
   }
 
-  /* ── 로그인 (v35 doLogin 사양: 인증 → app_users 조회 → 상태검증 → 기록) ── */
+  /* ── 로그인 (v35 doLogin 사양) ── */
   async function doLogin(){
-    setErr('');
+    setMsg(loginMsg,'');
     var phone = normalizePhone(phoneIn.value);
     var pw = (pwIn.value||'').trim();
-    if(hasKorean(pw)) return setErr('비밀번호에 한글이 포함되어 있습니다.\n한/영 키를 영문으로 바꿔 다시 입력해주세요.');
-    if(!phone || phone.length<10) return setErr('전화번호를 정확히 입력해주세요.');
-    if(!pw) return setErr('비밀번호를 입력해주세요.');
+    if(hasKorean(pw)) return setMsg(loginMsg,'비밀번호에 한글이 포함되어 있습니다.\n한/영 키를 영문으로 바꿔 다시 입력해주세요.','error');
+    if(!phone || phone.length<10) return setMsg(loginMsg,'전화번호를 정확히 입력해주세요.','error');
+    if(!pw) return setMsg(loginMsg,'비밀번호를 입력해주세요.','error');
     busy(true);
     try{
       var email = phoneToEmail(phone);
@@ -1512,7 +1568,6 @@ updateTeamBtn();
       if(me.status==='pending'){ await sb.auth.signOut(); throw new Error('가입 승인 대기 중입니다.\n담당 매니저(SM) 승인 후 로그인 가능합니다.'); }
       if(me.status==='rejected'){ await sb.auth.signOut(); throw new Error('가입이 거부되었습니다. 매니저에게 문의하세요.'); }
       if(me.status==='retired'){ await sb.auth.signOut(); throw new Error('퇴사 처리된 계정입니다. 매니저에게 문의하세요.'); }
-      // 기록 (best-effort)
       var nowIso = new Date().toISOString();
       sb.from('app_users').update({ last_login_at: nowIso }).eq('id', me.id).then(function(){}).catch(function(){});
       try{ sb.from('login_logs').insert({ member_name: me.name, team: me.team||null, logged_at: nowIso })
@@ -1520,34 +1575,31 @@ updateTeamBtn();
       enterDashboard(me);
     }catch(e){
       console.error('[LOGIN] 실패:', e);
-      setErr(translateError(e));
+      setMsg(loginMsg, translateError(e), 'error');
     }finally{ busy(false); }
   }
 
   /* ── 회원가입 (v35 doSignup 사양 + 팀 선택) ── */
   async function doSignup(){
-    setSMsg('');
+    setMsg(signupMsg,'');
     var name = (sName.value||'').trim();
     var phone = normalizePhone(sPhone.value);
     var team = sTeam.value;
     var referrer = (sRef.value||'').trim();
     var pw = (sPw.value||'').trim();
     var pw2 = (sPw2.value||'').trim();
-    if(hasKorean(pw) || hasKorean(pw2)) return setSMsg('비밀번호에 한글이 포함되어 있습니다.\n한/영 키를 영문으로 바꿔 다시 입력해주세요.');
-    if(!name) return setSMsg('이름을 입력해주세요.');
-    if(name.length>30) return setSMsg('이름이 너무 깁니다.');
-    if(!phone || phone.length<10) return setSMsg('휴대폰 번호를 정확히 입력해주세요.');
-    if(!team) return setSMsg('소속 팀을 선택해주세요.');
-    if(!pw || pw.length<6) return setSMsg('비밀번호는 6자 이상이어야 합니다.');
-    if(pw!==pw2) return setSMsg('비밀번호가 일치하지 않습니다.');
+    if(hasKorean(pw) || hasKorean(pw2)) return setMsg(signupMsg,'비밀번호에 한글이 포함되어 있습니다.\n한/영 키를 영문으로 바꿔 다시 입력해주세요.','error');
+    if(!name) return setMsg(signupMsg,'이름을 입력해주세요.','error');
+    if(name.length>30) return setMsg(signupMsg,'이름이 너무 깁니다.','error');
+    if(!phone || phone.length<10) return setMsg(signupMsg,'휴대폰 번호를 정확히 입력해주세요.','error');
+    if(!team) return setMsg(signupMsg,'소속 팀을 선택해주세요.','error');
+    if(!pw || pw.length<6) return setMsg(signupMsg,'비밀번호는 6자 이상이어야 합니다.','error');
+    if(pw!==pw2) return setMsg(signupMsg,'비밀번호가 일치하지 않습니다.','error');
     sBusy(true);
     try{
-      // 1) 폰번호 중복
       var dup = await sb.from('app_users').select('id,name').eq('phone', phone);
       if(dup.data && dup.data.length){ throw new Error('이미 이 번호로 가입된 사용자가 있습니다.\n다른 번호를 쓰거나 비밀번호 찾기를 이용하세요.'); }
-      // 2) 같은 이름의 미연결(approved, auth_id NULL) 기존 사용자
       var ex = await sb.from('app_users').select('id,name,team,role,status').eq('name', name).is('auth_id', null);
-      // 3) 도입자(선택) — RPC 있으면 검증, 없으면 통과(테스트 환경)
       if(referrer){
         try{
           var rc = await sb.rpc('check_member_exists', { p_name: referrer });
@@ -1561,14 +1613,12 @@ updateTeamBtn();
       var existingUser = null;
       if(ex.data && ex.data.length===1) existingUser = ex.data[0];
       else if(ex.data && ex.data.length>1) throw new Error('동명이인이 발견되었습니다. 매니저에게 문의하세요.');
-      // 4) Auth 가입 + 세션 확정(INSERT가 RLS 통과하도록)
       var email = phoneToEmail(phone);
       var su = await sb.auth.signUp({ email:email, password:pw, options:{ data:{ name:name, phone:phone } } });
       if(su.error) throw su.error;
       if(!su.data.user) throw new Error('가입은 됐지만 사용자 정보를 받지 못했습니다.');
       var si = await sb.auth.signInWithPassword({ email:email, password:pw });
       if(si.error) throw si.error;
-      // 5) app_users 처리
       if(existingUser){
         var up = await sb.from('app_users').update({
           auth_id: su.data.user.id, phone:phone, email:email,
@@ -1576,7 +1626,6 @@ updateTeamBtn();
         }).eq('id', existingUser.id);
         if(up.error) throw up.error;
       } else {
-        // 신규 INSERT — 팀은 선택값. 시동계정은 자동 승인(v35 동일)
         var bRole='member', bTeam=team, bStatus='pending';
         if(phone==='01036641376'){ bRole='team_manager'; bTeam='3팀'; bStatus='approved'; }
         else if(phone==='01011111111'){ bRole='system_admin'; bTeam='전체'; bStatus='approved'; }
@@ -1584,39 +1633,52 @@ updateTeamBtn();
         var ins = await sb.from('app_users').insert({
           auth_id: su.data.user.id, name:name, team:bTeam, role:bRole,
           phone:phone, email:email, referrer: referrer||null, status:bStatus,
-          joined_at: getTodayKST(), is_new: (bRole==='member')   /* [2-4b] 당월 신규입사자/신입뱃지 표시용 */
+          joined_at: getTodayKST(), is_new: (bRole==='member')
         });
         if(ins.error){ console.error('[SIGNUP] INSERT 에러:', ins.error); throw ins.error; }
         if(isBoot){
-          setSMsg('✅ ' + name + '님(' + (bRole==='system_admin'?'시스템관리자':'SM') + ') 계정이 생성되었습니다.\n바로 로그인할 수 있습니다.', true);
+          setMsg(signupMsg, '✅ ' + name + '님(' + (bRole==='system_admin'?'시스템관리자':'SM') + ') 계정이 생성되었습니다.\n바로 로그인할 수 있습니다.', 'success');
           setTimeout(showLogin, 1800); sBusy(false); return;
         }
       }
-      // 6) 승인 전 진입 차단 — 자동 로그아웃
       await sb.auth.signOut();
       console.log('[SIGNUP] 신청 완료:', { name:name, team:team, status:'pending' });
-      setSMsg('✅ 가입 신청이 완료되었습니다!\n담당 팀(' + team + ') 매니저(SM) 승인 후 로그인할 수 있습니다.', true);
+      setMsg(signupMsg, '✅ 가입 신청이 완료되었습니다!\n담당 팀(' + team + ') 매니저(SM) 승인 후 로그인할 수 있습니다.', 'success');
       setTimeout(function(){
         sName.value=''; sPhone.value=''; sTeam.value=''; sRef.value=''; sPw.value=''; sPw2.value='';
         showLogin();
       }, 4500);
     }catch(e){
       console.error('[SIGNUP] 실패:', e);
-      setSMsg('가입 실패: ' + translateError(e));
+      setMsg(signupMsg, '가입 실패: ' + translateError(e), 'error');
     }finally{ sBusy(false); }
   }
 
+  /* ── 비밀번호 문의 (경량: 본인확인 접수 안내. 실제 재설정은 매니저 수동) ── */
+  async function doForgot(){
+    setMsg(forgotMsg,'');
+    var name = (fName.value||'').trim();
+    var phone = normalizePhone(fPhone.value);
+    if(!name) return setMsg(forgotMsg,'이름을 입력해주세요.','error');
+    if(!phone || phone.length<10) return setMsg(forgotMsg,'휴대폰 번호를 정확히 입력해주세요.','error');
+    setMsg(forgotMsg, '✅ 요청이 접수되었습니다.\n본인 확인 후 담당 매니저(SM)가 임시 비밀번호를 안내해 드립니다.', 'success');
+  }
+
   // 이벤트 연결
-  btn.addEventListener('click', doLogin);
-  pwIn.addEventListener('keydown',   function(e){ if(e.key==='Enter') doLogin(); });
-  phoneIn.addEventListener('keydown',function(e){ if(e.key==='Enter') pwIn.focus(); });
-  sBtn.addEventListener('click', doSignup);
-  sPw2.addEventListener('keydown', function(e){ if(e.key==='Enter') doSignup(); });
-  document.getElementById('toSignup').addEventListener('click', showSignup);
-  document.getElementById('toLogin').addEventListener('click', showLogin);
+  btnLogin.addEventListener('click', doLogin);
+  pwIn.addEventListener('keydown',    function(e){ if(e.key==='Enter') doLogin(); });
+  phoneIn.addEventListener('keydown', function(e){ if(e.key==='Enter') pwIn.focus(); });
+  btnSignup.addEventListener('click', doSignup);
+  sPw2.addEventListener('keydown',    function(e){ if(e.key==='Enter') doSignup(); });
+  btnForgot.addEventListener('click', doForgot);
+  fPhone.addEventListener('keydown',  function(e){ if(e.key==='Enter') doForgot(); });
+  document.getElementById('link-to-signup').addEventListener('click', showSignup);
+  document.getElementById('link-to-forgot').addEventListener('click', showForgot);
+  document.getElementById('link-signup-to-login').addEventListener('click', showLogin);
+  document.getElementById('link-forgot-to-login').addEventListener('click', showLogin);
   logoutBtn.addEventListener('click', async function(){
     try{ await sb.auth.signOut(); }catch(e){}
-    phoneIn.value=''; pwIn.value=''; setErr(''); showLogin(); showGate();
+    phoneIn.value=''; pwIn.value=''; setMsg(loginMsg,''); showLogin(); showGate();
     console.log('[LOGIN] 로그아웃');
   });
 
