@@ -737,6 +737,7 @@ function renderTicker(){
     return '<span class="tk-item">🏆 ['+t.name+'] '+r.name+' <span class="amt">'+won(r.rev)+'원</span></span>';}).join('');
   el('tickerTrack').innerHTML = items;
 }
+/* [2-4c] expose */ window.renderKPI=renderKPI;
 function renderKPI(){
   var m=el('selMonth').value;
   var isAll=(m==='all');
@@ -757,6 +758,7 @@ function renderKPI(){
       +'<div class="k-x">청약철회·효력상실 관리</div></div>';
   el('kpiCards').querySelectorAll('.num[data-cnt]').forEach(function(n){countUp(n,parseInt(n.dataset.cnt,10),'','');});
 }
+/* [2-4c] expose */ window.renderInflow=renderInflow;
 function renderInflow(){
   var rows = DATA.inflow.map(function(r){
     var mtr=(r.mt/r.assigned*100).toFixed(1), ctr=(r.ct/r.mt*100).toFixed(1);
@@ -1583,6 +1585,7 @@ updateTeamBtn();
     var wr = document.getElementById('whoRole'); if(wr) wr.textContent = (roleKor[me.role]||me.role) + teamKor + ' 권한 접속중';
     hideGate();
     loadPeople();
+    if(window.loadStats) window.loadStats();   /* [2-4c] db_records 집계 → KPI/DB유입/팀별현황 */
   }
 
   /* ── 로그인 (v35 doLogin 사양) ── */
@@ -1829,6 +1832,147 @@ updateTeamBtn();
   attachPasswordHelpers('signup-pw2','signup-pw2-warn');
 })();
 </script>
+
+<!-- ===== [v18 / 2-4c] v35 KPI·DB유입·팀별현황 집계 엔진 (사후 보정 방식, 원본 렌더 불변) ===== -->
+<script id="stats-engine">
+(function(){
+  var sb = window.sbClient;
+  window.__dbRecords = window.__dbRecords || null;   // 읽기 전용 캐시(원본 보존)
+
+  /* v35 공식 헬퍼 (그대로 이식) */
+  function normStatus(s){ s=String(s||'').trim(); if(s==='진행중')return '상담 진행중'; if(s==='대기')return '선택'; return s; }
+  function safeNum(v){ if(v==null)return 0; if(typeof v==='number')return isFinite(v)?v:0; return parseInt(String(v).replace(/,/g,''),10)||0; }
+  function parseYM(s){ if(!s)return{y:0,m:0}; var d=new Date(s); if(!isNaN(d.getTime()))return{y:d.getFullYear(),m:d.getMonth()+1};
+    var p=String(s).match(/(\d{4})[.\-\/]\s?(\d{1,2})/); return p?{y:+p[1],m:+p[2]}:{y:0,m:0}; }
+  function ymMatch(s,y,m,isAll){ var p=parseYM(s); if(!p.y||p.y!==y)return false; return isAll?true:p.m===m; }
+  function isExternal(n){ if(!n)return false; if(n==='회사')return true; return /\d.*팀/.test(n); }
+  function getDBContracts(d){ var st=String(d.status||'').trim();
+    if(st!=='계약'&&st!=='청철/실효')return [];
+    if(Array.isArray(d.contracts)&&d.contracts.length)return d.contracts;
+    if(d.raw&&Array.isArray(d.raw.contracts)&&d.raw.contracts.length)return d.raw.contracts;
+    return []; }
+  function teamKey(t){ return ({'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'})[t]||null; }
+  function srcKey(s){ if(s==='회사DB')return '회사 DB'; if(s==='개인DB')return '개인 DB'; return '기타 DB'; } /* 기타/추장호/팀/null→기타 */
+  function blank(){ return {assigned:0,mt:0,ct:0,rev:0}; }
+
+  /* db_records → STATS (선택 연/월) */
+  function compute(recs, year, month, isAll){
+    var gross=0, contractCount=0, lapseCount=0, lapseAmount=0;
+    var inflow={'회사 DB':blank(),'개인 DB':blank(),'기타 DB':blank(),'재배정 DB':blank()};
+    var matrix={'회사 DB':{},'개인 DB':{},'기타 DB':{},'재배정 DB':{}};
+    function cell(src,tk){ if(!matrix[src][tk])matrix[src][tk]=blank(); return matrix[src][tk]; }
+    (recs||[]).forEach(function(d){
+      if(d.is_frozen) return;
+      var st=normStatus(d.status), tk=teamKey(d.team);
+      var skEff = d.is_reassigned ? '재배정 DB' : srcKey(d.source);
+      getDBContracts(d).forEach(function(c){
+        var cd=c.date||d.date;
+        if(st==='계약' && !c.isLapsed && ymMatch(cd,year,month,isAll)){
+          var amt=safeNum(c.totalAmount||c.amount);
+          (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
+          gross+=amt; contractCount++;
+        }
+        if(c.isLapsed){ var ld=c.lapseDate||c.date||'';
+          if(ymMatch(ld,year,month,isAll)){ lapseCount++; var keep=true;
+            if((c.lapseType||'실효')==='실효'){ var lp=parseYM(ld),cp=parseYM(c.date||''); if(lp.y&&cp.y&&Math.abs((lp.y-cp.y)*12+(lp.m-cp.m))>24) keep=false; }
+            if(keep) lapseAmount+=safeNum(c.amount||c.totalAmount); } }
+      });
+      inflow[skEff].assigned++; if(tk) cell(skEff,tk).assigned++;
+      if(String(d.meet_status||'')==='진행' && st!=='가망고객' && st!=='계약' && st!=='종료' && st!=='청철/실효'){
+        inflow[skEff].mt++; if(tk) cell(skEff,tk).mt++; }
+      if(st==='계약'){ getDBContracts(d).forEach(function(c){
+        if(c.isLapsed) return; var cd=c.date||d.date; if(!ymMatch(cd,year,month,isAll)) return;
+        var amt=safeNum(c.totalAmount||c.amount);
+        (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
+        inflow[skEff].ct++; inflow[skEff].rev+=amt; if(tk){ cell(skEff,tk).ct++; cell(skEff,tk).rev+=amt; } }); }
+    });
+    return {ready:true, year:year, month:month, isAll:isAll,
+      grossRevenue:gross, contractCount:contractCount, lapseCount:lapseCount, lapseAmount:lapseAmount,
+      inflow:inflow, matrix:matrix};
+  }
+
+  /* STATS → DATA.inflow + DB_MATRIX 주입 (renderInflow/openTeamDB가 자동 사용) */
+  function injectSources(st){
+    DATA.inflow = ['회사 DB','개인 DB','기타 DB','재배정 DB'].map(function(s){
+      var c=st.inflow[s]||blank(); return {src:s,assigned:c.assigned,mt:c.mt,ct:c.ct,rev:c.rev,danger:(s==='재배정 DB')}; });
+    try{ window.DB_MATRIX=window.DB_MATRIX||{};
+      ['회사 DB','개인 DB','기타 DB','재배정 DB'].forEach(function(s){ window.DB_MATRIX[s]=window.DB_MATRIX[s]||{};
+        ['t1','t2','t3','t4'].forEach(function(tk){ window.DB_MATRIX[s][tk]=(st.matrix[s]&&st.matrix[s][tk])||blank(); }); });
+    }catch(e){ console.warn('[2-4c] DB_MATRIX 주입 경고:', e&&e.message); }
+    DATA.contracts = st.contractCount;
+  }
+
+  /* 사후 보정: 원본 renderKPI가 그린 카드 DOM을 실데이터로 덮어쓰기 (v35 renderPatchedDashboard 패턴) */
+  /* 진행 중인 countUp(rAF)이 노드를 계속 덮어쓰므로, 값 노드를 clone 교체해 타이머 참조를 끊고 실값 고정 */
+  function setNumNode(card, text){
+    if(!card) return;
+    var n=card.querySelector('.k-v .num');
+    if(n){ var c=n.cloneNode(false); c.removeAttribute('data-cnt'); c.textContent=text; n.parentNode.replaceChild(c,n); return; }
+    var v=card.querySelector('.k-v'); if(v) v.textContent=text;
+  }
+  function patchKPICards(st){
+    var box=document.getElementById('kpiCards'); if(!box) return;
+    var cards=box.querySelectorAll('.kpi');
+    var isAll=st.isAll;
+    // 카드1 총매출 (원 단위) — 라벨 span은 보존
+    if(cards[0]){
+      setNumNode(cards[0], st.grossRevenue.toLocaleString('ko-KR'));
+      var x1=cards[0].querySelector('.k-x'); if(x1) x1.textContent = isAll ? ('청철/실효 '+st.lapseAmount.toLocaleString('ko-KR')+'원 차감 총매출') : '팀 전체 합산';
+    }
+    // 카드2 계약 건수
+    if(cards[1]) setNumNode(cards[1], st.contractCount.toLocaleString('ko-KR'));
+    // 카드3 청철/실효 건수 (원본은 .num 없이 "0" 텍스트 → k-v 통째 교체)
+    if(cards[2]){ var v3=cards[2].querySelector('.k-v');
+      if(v3){ v3.innerHTML = '<span class="num">'+st.lapseCount.toLocaleString('ko-KR')+'</span><span class="k-s"> 건</span>'; } }
+  }
+
+  function getSel(){
+    var y=parseInt((document.getElementById('selYear')||{}).value||'2026',10)||2026;
+    var mv=(document.getElementById('selMonth')||{}).value||'all';
+    var isAll=(mv==='all'); return {y:y, m:isAll?null:parseInt(mv,10), isAll:isAll};
+  }
+
+  /* 재집계 + 재렌더 + 보정 (연/월 변경, 캐시 재사용 = db_records 재요청 없음) */
+  window.applyStats = function(){
+    if(!window.__dbRecords) return;
+    var s=getSel();
+    var st=compute(window.__dbRecords, s.y, s.m, s.isAll);
+    window.STATS=st;
+    injectSources(st);
+    if(typeof window.renderInflow==='function') window.renderInflow();  // DATA.inflow 기반 재렌더
+    if(typeof window.renderKPI==='function') window.renderKPI();        // 원본 렌더(더미값)
+    patchKPICards(st);                                                  // → 실데이터로 사후 보정
+  };
+
+  /* db_records 1회 로드(읽기 전용) → 적용 */
+  /* 원본 onDateChange 불변 — 래핑하여 연/월 변경 시 재집계 덧붙임 */
+  (function(){ var _orig=window.onDateChange;
+    window.onDateChange=function(){ if(typeof _orig==='function') _orig.apply(this,arguments); if(window.applyStats) window.applyStats(); }; })();
+
+  window.loadStats = async function(){
+    if(!sb){ console.warn('[2-4c] sbClient 없음'); return; }
+    try{
+      if(!window.__dbRecords){
+        var all=[], from=0, size=1000;
+        while(true){
+          var r=await sb.from('db_records').select('*').range(from, from+size-1);
+          if(r.error){ console.warn('[2-4c] db_records 조회 실패:', r.error.message); break; }
+          all=all.concat(r.data||[]);
+          if(!r.data || r.data.length<size) break;
+          from+=size;
+        }
+        window.__dbRecords=all;   /* 읽기 전용 캐시 (원본 보존, 쓰기 없음) */
+        console.log('[2-4c] db_records 로드:', all.length, '건 (읽기 전용)');
+      }
+      window.applyStats();
+      var st=window.STATS;
+      console.log('%c[2-4c] KPI 집계','color:#0f9d6b;font-weight:bold',
+        {총매출:st.grossRevenue, 계약:st.contractCount, 청철실효:st.lapseCount+'건/'+st.lapseAmount+'원'});
+    }catch(e){ console.warn('[2-4c] loadStats 경고:', e&&e.message); }
+  };
+})();
+</script>
+
 
 </body>
 </html>
