@@ -2600,5 +2600,39 @@ updateTeamBtn();
 
 
 
+<!-- ===== [v36.4 / B-3] 팀 작업실 입장 -> v35 실주소 연결 (원본 enterTeam(1236) 보존, 전역 재정의로 우회) ===== -->
+<script>
+(function(){
+  /* 대장 확정 v35 라이브 주소 (2026-06-29) */
+  var V35_URL = 'https://db-dashboard-swart.vercel.app/';
+
+  /* v35 작업실을 새 탭으로 열기 (이 대시보드는 그대로 유지) */
+  window.openV35Workspace = function(){
+    try{ window.open(V35_URL, '_blank', 'noopener'); }catch(e){}
+    if(typeof closeModal==='function') closeModal();
+  };
+
+  /* 원본 enterTeam 덮어쓰기: 권한 분기/문구 동일 + 확인 버튼만 실제 v35 연결 */
+  window.enterTeam = function(id){
+    var t = (typeof teamById==='function') ? teamById(id) : null;
+    if(!t) return;
+    var mine = (id === DATA.curUserTeam);
+    if(DATA.role==='BM' || DATA.role==='system_admin' || mine){
+      modal('<div style="text-align:center;"><div style="font-size:38px;">\uD83D\uDEAA</div>'
+        +'<h3 style="justify-content:center;">'+t.name+' \uC791\uC5C5\uC2E4 \uC811\uC18D</h3>'
+        +'<p style="color:var(--ink2);">'+t.name+' v35 \uC601\uC5C5\uAD00\uB9AC \uC2DC\uC2A4\uD15C\uC73C\uB85C \uC774\uB3D9\uD569\uB2C8\uB2E4.<br>'
+        +'<span style="font-size:12px;color:var(--muted);">\uC0C8 \uD0ED\uC5D0\uC11C v35\uAC00 \uC5F4\uB9BD\uB2C8\uB2E4. \uC774 \uB300\uC2DC\uBCF4\uB4DC\uB294 \uADF8\uB300\uB85C \uC720\uC9C0\uB429\uB2C8\uB2E4.</span></p>'
+        +'<button class="btn" style="width:100%;margin-top:10px;" onclick="openV35Workspace()">v35 \uC791\uC5C5\uC2E4 \uC5F4\uAE30</button>'
+        +'<button class="btn ghost" style="width:100%;margin-top:8px;" onclick="closeModal()">\uB2EB\uAE30</button></div>');
+    } else {
+      modal('<div style="text-align:center;"><div style="font-size:38px;">\uD83D\uDEAB</div>'
+        +'<h3 style="justify-content:center;">\uC811\uC18D \uAD8C\uD55C \uC5C6\uC74C</h3>'
+        +'<p style="color:var(--ink2);"><b>'+t.name+'</b>\uC740(\uB294) \uBCF8\uC778 \uD300\uC774 \uC544\uB2D9\uB2C8\uB2E4.<br>\uBCF8\uC778 \uD300 \uC791\uC5C5\uC2E4\uC5D0\uB9CC \uC811\uC18D\uD560 \uC218 \uC788\uC2B5\uB2C8\uB2E4.</p>'
+        +'<button class="btn ghost" style="width:100%;margin-top:10px;" onclick="closeModal()">\uB2EB\uAE30</button></div>');
+    }
+  };
+})();
+</script>
+
 </body>
 </html>
