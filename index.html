@@ -903,6 +903,7 @@ function renderBoardAll(k){
     return '<div class="bpost" onclick="viewPost(\''+k+'\',\''+p.id+'\')"><div class="bp-top">'+badge+'<span class="bp-title">'+p.title+'</span><span class="bp-date">'+p.date+'</span>'+del+'</div><div class="bp-snip">'+snippet(p.body)+'</div></div>';
   }).join('') : '<div style="text-align:center;color:var(--muted);padding:30px;">검색 결과가 없습니다.</div>';
 }
+/* [2-4c] expose */ window.renderRace=renderRace;
 function renderRace(){
   var mv=el('selMonth').value, isAll=(mv==='all'); var mi=isAll?5:(parseInt(mv,10)-1);
   // 팀별 [목표, 올해, 전년] 산출
@@ -1121,6 +1122,7 @@ function toggleChart(id){
   if(i>=0){ if(chartSel.length>1) chartSel.splice(i,1); } else chartSel.push(id);
   renderChartChips(); renderChart();
 }
+/* [2-4c] expose */ window.renderChart=renderChart;
 function renderChart(){
   var cv=el('teamChart'); if(!cv) return;
   if(typeof Chart==='undefined'){ cv.parentElement.innerHTML='<div style="padding:40px;text-align:center;color:var(--muted);">차트 라이브러리 로드 대기(오프라인). 온라인에서 표시됩니다.</div>'; return; }
@@ -1902,6 +1904,78 @@ updateTeamBtn();
     DATA.contracts = st.contractCount;
   }
 
+  /* ---- [A] 레이스/차트: 팀별 월별 매출 (연도별 1~12월, 만원 단위) ---- */
+  /* curM/prevM은 만원 단위 배열(렌더가 그렇게 사용). db_records는 원 단위 → /10000 */
+  function computeMonthly(recs, year){
+    var byTeam={t1:new Array(12).fill(0),t2:new Array(12).fill(0),t3:new Array(12).fill(0),t4:new Array(12).fill(0)};
+    (recs||[]).forEach(function(d){
+      if(d.is_frozen) return;
+      if(normStatus(d.status)!=='계약') return;
+      var tk=teamKey(d.team); if(!tk) return;
+      getDBContracts(d).forEach(function(c){
+        if(c.isLapsed) return;
+        var p=parseYM(c.date||d.date); if(p.y!==year || p.m<1 || p.m>12) return;
+        var amt=safeNum(c.totalAmount||c.amount);
+        (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
+        byTeam[tk][p.m-1]+=amt;
+      });
+    });
+    // 원 → 만원 (반올림)
+    Object.keys(byTeam).forEach(function(tk){ byTeam[tk]=byTeam[tk].map(function(v){return Math.round(v/10000);}); });
+    return byTeam;
+  }
+
+  /* ---- [A] 목표: monthly_goals(member_name,year,month,amount) → 팀별 월별 목표 합산(만원) ---- */
+  /* v35 loadGoalsFromSupabase 이식. member→team 매핑은 app_users로. 없으면 goal=0 */
+  var _goalCache=null, _memberTeam=null;
+  async function loadGoalCache(){
+    if(!sb) return;
+    try{
+      // member → team 매핑 (app_users)
+      if(!_memberTeam){
+        _memberTeam={};
+        var u=await sb.from('app_users').select('name,team');
+        (u.data||[]).forEach(function(r){ if(r.name) _memberTeam[r.name]=teamKey(r.team); });
+      }
+      // monthly_goals 로드 (RLS 권한 내에서만 — 세션 필요)
+      var g=await sb.from('monthly_goals').select('member_name,year,month,amount');
+      if(g.error){ console.warn('[2-4c레이스] monthly_goals 로드 실패:', g.error.message); _goalCache={}; return; }
+      _goalCache={};
+      (g.data||[]).forEach(function(r){
+        var tk=_memberTeam[r.member_name]; if(!tk) return;
+        var k=tk+'_'+r.year+'_'+r.month;
+        _goalCache[k]=(_goalCache[k]||0)+ (parseInt(r.amount,10)||0);
+      });
+      console.log('[2-4c레이스] monthly_goals', (g.data||[]).length, '건 → 팀목표 캐시');
+    }catch(e){ console.warn('[2-4c레이스] 목표 로드 경고:', e&&e.message); _goalCache={}; }
+  }
+  /* 팀 tk의 year/month 목표(만원). 데이터 없으면 0 */
+  function teamGoal(tk,year,month){
+    if(!_goalCache) return 0;
+    var won=_goalCache[tk+'_'+year+'_'+month]||0;
+    return Math.round(won/10000);
+  }
+
+  /* ---- [A] teams[].curM/prevM/goal 주입 (renderRace/renderChart가 자동 사용) ---- */
+  function injectRace(){
+    if(!window.__dbRecords) return;
+    var s=getSel(); var year=s.y;
+    var cur=computeMonthly(window.__dbRecords, year);
+    var prev=computeMonthly(window.__dbRecords, year-1);  // 전년(2025=0)
+    DATA.teams.forEach(function(t){
+      var tk=t.id;
+      // 현재 렌더는 6개월(1~6월) 사용 → 12개월 배열 그대로 주입(렌더가 slice(0,6))
+      t.curM = cur[tk] ? cur[tk].slice(0,6) : [0,0,0,0,0,0];
+      t.prevM = prev[tk] ? prev[tk].slice(0,6) : [0,0,0,0,0,0];
+      // 월목표: 현재월(또는 1~6월 평균적 목표) — 렌더는 t.goal(월목표) 사용. 데이터 없으면 0
+      var gm=0; for(var mm=1;mm<=6;mm++){ gm=Math.max(gm, teamGoal(tk,year,mm)); }
+      // 월별 목표가 있으면 현재 선택월 기준, 없으면 0 (보완B에서 "미설정" 표시)
+      var selM = s.isAll ? 6 : s.m;
+      var gSel = teamGoal(tk,year,selM);
+      t.goal = gSel>0 ? gSel : gm;  // 선택월 목표 우선, 없으면 1~6월 중 설정된 값
+    });
+  }
+
   /* 사후 보정: 원본 renderKPI가 그린 카드 DOM을 실데이터로 덮어쓰기 (v35 renderPatchedDashboard 패턴) */
   /* 진행 중인 countUp(rAF)이 노드를 계속 덮어쓰므로, 값 노드를 clone 교체해 타이머 참조를 끊고 실값 고정 */
   function setNumNode(card, text){
@@ -1926,6 +2000,23 @@ updateTeamBtn();
       if(v3){ v3.innerHTML = '<span class="num">'+st.lapseCount.toLocaleString('ko-KR')+'</span><span class="k-s"> 건</span>'; } }
   }
 
+  /* [보완B] 레이스 막대 중 값=0인 '목표'/'전년'에 안내 텍스트 표시 */
+  function patchRaceLabels(){
+    try{
+      var box=document.getElementById('teamRace'); if(!box) return;
+      box.querySelectorAll('.race-team').forEach(function(rt){
+        rt.querySelectorAll('.bar-row').forEach(function(row){
+          var l=row.querySelector('.bar-l'), v=row.querySelector('.bar-v');
+          if(!l||!v) return;
+          var lbl=l.textContent.trim();
+          var isZero = /(^|\D)0만$/.test(v.textContent.trim());
+          if(isZero && (lbl==='목표')) v.textContent='목표 미설정';
+          else if(isZero && (lbl.indexOf('전년')>=0)) v.textContent='전년 데이터 없음';
+        });
+      });
+    }catch(e){}
+  }
+
   function getSel(){
     var y=parseInt((document.getElementById('selYear')||{}).value||'2026',10)||2026;
     var mv=(document.getElementById('selMonth')||{}).value||'all';
@@ -1942,6 +2033,10 @@ updateTeamBtn();
     if(typeof window.renderInflow==='function') window.renderInflow();  // DATA.inflow 기반 재렌더
     if(typeof window.renderKPI==='function') window.renderKPI();        // 원본 렌더(더미값)
     patchKPICards(st);                                                  // → 실데이터로 사후 보정
+    injectRace();                                                       // [A] teams 월별매출/목표 주입
+    if(typeof window.renderRace==='function') window.renderRace();      // 레이스 재렌더(실데이터)
+    if(typeof window.renderChart==='function') window.renderChart();    // 차트 재렌더(실데이터)
+    patchRaceLabels();                                                  // [보완B] 0막대 안내
   };
 
   /* db_records 1회 로드(읽기 전용) → 적용 */
@@ -1964,6 +2059,7 @@ updateTeamBtn();
         window.__dbRecords=all;   /* 읽기 전용 캐시 (원본 보존, 쓰기 없음) */
         console.log('[2-4c] db_records 로드:', all.length, '건 (읽기 전용)');
       }
+      await loadGoalCache();   /* [A] monthly_goals → 팀목표 캐시 (세션 권한 내) */
       window.applyStats();
       var st=window.STATS;
       console.log('%c[2-4c] KPI 집계','color:#0f9d6b;font-weight:bold',
