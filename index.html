@@ -15,6 +15,13 @@
   var SB_URL  = 'https://hmlanmuqyootiwxodzwe.supabase.co';
   var SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImhtbGFubXVxeW9vdGl3eG9kendlIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODIxNDc5NDQsImV4cCI6MjA5NzcyMzk0NH0.hvE9Wja-4a7W9YW5JPh8MIuQkLq0cMLMjZwnsbHZnhg';
 
+  /* ===== [v36.5 / B-5] 실DB 스위치 : 연습 금고 -> 진짜 금고(라이브) =====
+     원본 15~16(연습 금고 값) 보존. 아래에서 실금고 값으로 덮어씀.
+     롤백 필요 시 이 블록(SB_URL/SB_ANON 두 줄)만 지우면 연습 금고로 즉시 복귀. */
+  SB_URL  = 'https://gcerzpjmpwytndnqlvdb.supabase.co';
+  SB_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImdjZXJ6cGptcHd5dG5kbnFsdmRiIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYxNTU1OTQsImV4cCI6MjA5MTczMTU5NH0.WJsdOY1CuzzYEIyKvGaejcta2bta0-nxma8a9LIeNXg';
+  /* ===== [B-5 끝] ===== */
+
   if (!window.supabase || !window.supabase.createClient) {
     console.error('[SB] supabase-js 로드 실패 — CDN 연결을 확인하세요.');
     return;
@@ -2633,6 +2640,8 @@ updateTeamBtn();
   };
 })();
 </script>
+<!-- ===== [v36.5 / B-5] \ud68c\uc6d0\uac00\uc785 \uc9c4\uc785 \uc228\uae40 : \ub85c\uadf8\uc778 \uc804\uc6a9 (\ud300\uc6d0\uc740 v35\uc5d0\uc11c \uac00\uc785). \uac00\uc785 \ub85c\uc9c1\uc740 \ubcf4\uc874\u2014\ucd94\ud6c4 \uc7ac\ub178\ucd9c \uac00\ub2a5 ===== -->
+<style>#link-to-signup{display:none !important;}</style>
 
 </body>
 </html>
