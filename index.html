@@ -1908,6 +1908,7 @@ updateTeamBtn();
   /* curM/prevM은 만원 단위 배열(렌더가 그렇게 사용). db_records는 원 단위 → /10000 */
   function computeMonthly(recs, year){
     var byTeam={t1:new Array(12).fill(0),t2:new Array(12).fill(0),t3:new Array(12).fill(0),t4:new Array(12).fill(0)};
+    var ctTeam={t1:new Array(12).fill(0),t2:new Array(12).fill(0),t3:new Array(12).fill(0),t4:new Array(12).fill(0)};
     (recs||[]).forEach(function(d){
       if(d.is_frozen) return;
       if(normStatus(d.status)!=='계약') return;
@@ -1918,10 +1919,12 @@ updateTeamBtn();
         var amt=safeNum(c.totalAmount||c.amount);
         (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
         byTeam[tk][p.m-1]+=amt;
+        ctTeam[tk][p.m-1]+=1;   /* 팀별 월별 계약건수 */
       });
     });
     // 원 → 만원 (반올림)
     Object.keys(byTeam).forEach(function(tk){ byTeam[tk]=byTeam[tk].map(function(v){return Math.round(v/10000);}); });
+    byTeam.__ct=ctTeam;   /* 계약건수 매트릭스 동봉 */
     return byTeam;
   }
 
@@ -1970,6 +1973,8 @@ updateTeamBtn();
     var s=getSel(); var year=s.y;
     var cur=computeMonthly(window.__dbRecords, year);
     var prev=computeMonthly(window.__dbRecords, year-1);  // 전년(2025=0)
+    window.__ctMonthly = cur.__ct || null;   /* 팀별 월별 계약건수(우승배너 실데이터) */
+    window.__raceYear = year;
     DATA.teams.forEach(function(t){
       var tk=t.id;
       // 현재 렌더는 6개월(1~6월) 사용 → 12개월 배열 그대로 주입(렌더가 slice(0,6))
@@ -2025,6 +2030,25 @@ updateTeamBtn();
     }catch(e){}
   }
 
+  /* [v21] 우승배너 "계약 N건"을 실집계로 교체 (매출은 이미 실데이터, 건수만 더미였음) */
+  function patchChampContracts(){
+    try{
+      var box=document.getElementById('champBanner'); if(!box) return;
+      var s=getSel(); var ct=window.__ctMonthly; if(!ct) return;
+      // 1등 팀 식별: 배너의 팀명 매칭 (renderRace가 cur 최대 팀을 1등으로 표기)
+      var teamEl=box.querySelector('.champ.team .c-big-name');
+      if(!teamEl) return;
+      var teamName=(teamEl.childNodes[0] && teamEl.childNodes[0].textContent || teamEl.textContent||'').trim();
+      var t=(DATA.teams||[]).find(function(x){return x.name===teamName;}); if(!t) return;
+      var arr=ct[t.id]||[];
+      var total;
+      if(s.isAll){ total=arr.slice(0,12).reduce(function(a,b){return a+b;},0); }
+      else { total=arr[(s.m||1)-1]||0; }
+      var amtEl=box.querySelector('.champ.team .c-amt');
+      if(amtEl){ amtEl.innerHTML=amtEl.innerHTML.replace(/계약\s*\d+\s*건/, '계약 '+total+'건'); }
+    }catch(e){ console.warn('[v21] 우승배너 계약 보정 경고:', e&&e.message); }
+  }
+
   function getSel(){
     var y=parseInt((document.getElementById('selYear')||{}).value||'2026',10)||2026;
     var mv=(document.getElementById('selMonth')||{}).value||'all';
@@ -2045,6 +2069,7 @@ updateTeamBtn();
     if(typeof window.renderRace==='function') window.renderRace();      // 레이스 재렌더(실데이터)
     if(typeof window.renderChart==='function') window.renderChart();    // 차트 재렌더(실데이터)
     patchRaceLabels();                                                  // [보완B] 0막대 안내
+    patchChampContracts();                                              // [v21] 우승배너 계약건수 실데이터 보정
   };
 
   /* db_records 1회 로드(읽기 전용) → 적용 */
@@ -2095,7 +2120,20 @@ updateTeamBtn();
     return '';
   };
   window.isMyPost = function(p){ if(!p) return false; var me=currentUserName(); return !!me && p.authorName===me; };
+  /* [v21] 삭제 권한 세분화
+     - 공지(notice): 본인 OR 시스템관리자
+     - 익명(free)  : 본인 OR SM/BM/시스템관리자 */
+  window.canDeletePost = function(k,p){
+    var role=(window.DATA&&DATA.role)||'';
+    if(isMyPost(p)) return true;
+    if(k==='notice') return role==='system_admin';
+    return ['SM','BM','system_admin'].indexOf(role)>=0;   // free
+  };
+  /* 수정 권한: 본인만 (관리자라도 타인 글 내용 수정은 불가 — 삭제만) */
+  window.canEditPost = function(p){ return isMyPost(p); };
+  /* 하위호환: 기존 canManagePost 호출부 유지 (관리=삭제 가능 기준) */
   window.canManagePost = function(p){
+    // k 모를 때 보수적으로: 관리자 권한 or 본인
     try{ if(typeof canDeleteBoard==='function' && canDeleteBoard()) return true; }catch(e){}
     return isMyPost(p);
   };
@@ -2126,13 +2164,11 @@ updateTeamBtn();
       window.deletePost=function(k,id){
         try{
           var p=(k==='notice'?DATA.notices:DATA.free).find(function(x){return x.id===id;});
-          var admin=(typeof canDeleteBoard==='function'&&canDeleteBoard());
-          if(!admin && isMyPost(p)){
-            /* 본인글: 원본 권한가드를 우회하기 위해 직접 삭제 확인 모달 */
-            return myDeleteConfirm(k,id,p);
-          }
+          if(!canDeletePost(k,p)){ if(typeof permPopup==='function')permPopup(); return; }  /* [v21] 세분화 권한 */
+          /* 권한 통과 → 본인글이든 관리자든 동일 삭제 확인 모달 */
+          return myDeleteConfirm(k,id,p);
         }catch(e){}
-        return _del.apply(this,arguments);   /* 관리자/비본인은 원본 그대로 */
+        return _del.apply(this,arguments);
       };
     }
 
@@ -2152,24 +2188,28 @@ updateTeamBtn();
         var r=_view.apply(this,arguments);
         try{
           var p=(k==='notice'?DATA.notices:DATA.free).find(function(x){return x.id===id;});
-          if(isMyPost(p)){
-            var root=document.getElementById('modalRoot')||document;
-            var btnRow=root.querySelector('.btn[onclick*="closeModal"]');
-            var bar=btnRow && btnRow.parentElement;
-            if(bar && !bar.querySelector('.b-edit-detail')){
+          var root=document.getElementById('modalRoot')||document;
+          var btnRow=root.querySelector('.btn[onclick*="closeModal"]');
+          var bar=btnRow && btnRow.parentElement;
+          if(bar){
+            /* [v21] 원본 viewPost가 canDeleteBoard 기준으로 그린 삭제버튼이 세분화 권한과 어긋나면 제거 후 재구성 */
+            var origDel=bar.querySelector('.btn[onclick*="deletePost"]:not(.b-del-detail)');
+            if(origDel && !canDeletePost(k,p)) { origDel.remove(); }
+            /* 수정 버튼: 본인만 */
+            if(canEditPost(p) && !bar.querySelector('.b-edit-detail')){
               var edt=document.createElement('button');
               edt.className='btn ghost b-edit-detail'; edt.style.flex='1';
               edt.innerHTML='<i class="fa-solid fa-pen"></i> 수정';
               edt.setAttribute('onclick',"closeModal();editPost('"+k+"','"+id+"')");
               bar.insertBefore(edt, bar.firstChild);
-              /* 본인글인데 관리자 삭제버튼이 없으면 삭제버튼도 추가 */
-              if(!bar.querySelector('.btn[onclick*="deletePost"]')){
-                var del=document.createElement('button');
-                del.className='btn ghost b-del-detail'; del.style.flex='1';
-                del.innerHTML='<i class="fa-solid fa-trash"></i> 삭제';
-                del.setAttribute('onclick',"deletePost('"+k+"','"+id+"')");
-                bar.insertBefore(del, edt.nextSibling);
-              }
+            }
+            /* 삭제 버튼: 세분화 권한(canDeletePost). 원본이 이미 단 삭제버튼 있으면 중복 안 함 */
+            if(canDeletePost(k,p) && !bar.querySelector('.btn[onclick*="deletePost"]') && !bar.querySelector('.b-del-detail')){
+              var del=document.createElement('button');
+              del.className='btn ghost b-del-detail'; del.style.flex='1';
+              del.innerHTML='<i class="fa-solid fa-trash"></i> 삭제';
+              del.setAttribute('onclick',"deletePost('"+k+"','"+id+"')");
+              bar.insertBefore(del, bar.firstChild);
             }
           }
         }catch(e){ console.warn('[게시판] 상세 수정버튼 경고:',e&&e.message); }
@@ -2214,22 +2254,12 @@ updateTeamBtn();
     };
 
     /* ---- (5) 목록 사후 보정: 본인글 행에 수정(+삭제) 버튼 주입 ---- */
+    /* [v21] 목록 밖 수정/삭제 버튼 제거 — 상세(viewPost) 진입 시에만 버튼 표시(미관) */
+    /* [v21] 목록은 깔끔하게 — 원본/본인글이 그린 목록 내 수정·삭제 아이콘 모두 제거(관리는 상세 진입 후) */
     window.decorateBoardMine=function(){
       ['noticeList','freeList','boardAllList'].forEach(function(boxId){
         var box=document.getElementById(boxId); if(!box) return;
-        box.querySelectorAll('li[onclick^="viewPost"]').forEach(function(li){
-          try{
-            var m=(li.getAttribute('onclick')||'').match(/viewPost\('(\w+)','([^']+)'\)/); if(!m) return;
-            var kk=m[1], id=m[2];
-            var p=(kk==='notice'?DATA.notices:DATA.free).find(function(x){return x.id===id;});
-            if(!p || !isMyPost(p)) return;
-            if(li.querySelector('.b-mine')) return;
-            var hasDel=!!li.querySelector('.b-del');
-            var html='<span class="b-edit b-mine" title="수정" onclick="event.stopPropagation();editPost(\''+kk+'\',\''+id+'\')"><i class="fa-solid fa-pen"></i></span>';
-            if(!hasDel) html+='<span class="b-del b-mine" title="삭제" onclick="event.stopPropagation();deletePost(\''+kk+'\',\''+id+'\')"><i class="fa-solid fa-trash"></i></span>';
-            li.insertAdjacentHTML('beforeend',html);
-          }catch(e){}
-        });
+        box.querySelectorAll('li .b-del, li .b-edit').forEach(function(b){ b.remove(); });
       });
     };
 
