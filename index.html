@@ -2819,5 +2819,22 @@ updateTeamBtn();
   }
 })();
 </script>
+<!-- ===== [v36.8 / C-1b] 게시판 삭제 영속화: confirmDelete 래핑 -> board_posts 삭제 (원본 0 삭제) =====
+     실제 삭제는 confirmDelete(확인 모달의 삭제 버튼)에서 일어나므로 여기를 래핑. 권한은 deletePost에서 이미 검증됨. -->
+<script>
+(function(){
+  if(typeof window.confirmDelete!=='function') return;
+  var _cd=window.confirmDelete;
+  window.confirmDelete=function(k,id){
+    var r=_cd.apply(this,arguments);   /* 원본: in-memory 삭제+렌더+모달닫기 */
+    try{ var sb=window.sbClient;
+      if(sb && id) sb.from('board_posts').delete().eq('id',id).then(function(res){
+        if(res && res.error) console.warn('[게시판] 삭제 경고:', res.error.message);
+        else console.log('[게시판] 삭제됨:', id); });
+    }catch(e){ console.warn('[게시판] 삭제 처리 경고:', e&&e.message); }
+    return r;
+  };
+})();
+</script>
 </body>
 </html>
