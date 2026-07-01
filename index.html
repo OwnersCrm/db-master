@@ -689,9 +689,10 @@ var DB_MATRIX={
 (function(){ try{
   if(typeof DATA!=='undefined' && DATA){
     if(DATA.teams) DATA.teams.forEach(function(t){ t.curM=[0,0,0,0,0,0]; t.prevM=[0,0,0,0,0,0]; t.goal=0; t.head=0; t.delta=0; });
-    DATA.contracts=0; DATA.riskCancel=0; DATA.riskVoid=0; DATA.ranking=[]; DATA.recruits=[];
+    DATA.contracts=0; DATA.riskCancel=0; DATA.riskVoid=0;
     if(DATA.inflow) DATA.inflow.forEach(function(s){ s.assigned=0; s.mt=0; s.ct=0; s.rev=0; });
-    DATA.promoArchive={'2026':{summer:[],winter:[]},'2025':{summer:[],winter:[]}};
+    /* ranking/recruits/promoArchive는 원본 샘플 유지 — injectRanking/injectPromo가 실데이터로 교체함.
+       (비우면 원본 renderRace가 topPerson=undefined로 크래시 → 팀선택 버튼 사라짐) */
   }
   if(typeof DB_MATRIX!=='undefined' && DB_MATRIX){ Object.keys(DB_MATRIX).forEach(function(src){ Object.keys(DB_MATRIX[src]).forEach(function(tk){ DB_MATRIX[src][tk]={assigned:0,mt:0,ct:0,rev:0}; }); }); }
   console.log('[B] 프로토타입 샘플 0 처리 - 실데이터만 표시(미연동 위젯은 0)');
@@ -2978,7 +2979,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.20';
+  var VER='v36.0.21';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
