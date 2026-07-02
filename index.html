@@ -1751,6 +1751,24 @@ updateTeamBtn();
         if(phone==='01036641376'){ bRole='team_manager'; bTeam='3팀'; bStatus='approved'; }
         else if(phone==='01011111111'){ bRole='system_admin'; bTeam='전체'; bStatus='approved'; }
         var isBoot = (bStatus==='approved');
+        /* [동명이인] 같은 팀에 동일 이름이 있으면 이름 뒤 숫자 부여(홍길동→홍길동2→홍길동3).
+           다른 팀은 겹쳐도 그대로, 부트계정(관리자/SM)은 이름 고정.
+           name 변수를 재할당하므로 이후 INSERT·안내 문구가 자동으로 새 이름을 사용. */
+        if(!isBoot){
+          try{
+            var _st = await sb.from('app_users').select('name').eq('team', bTeam);
+            if(_st.data && _st.data.length){
+              var _used = _st.data.map(function(u){ return u.name; });
+              if(_used.indexOf(name) >= 0){
+                var _base = name, _n = 2;
+                while(_used.indexOf(_base + _n) >= 0) _n++;
+                name = _base + _n;
+                console.log('[SIGNUP] 같은 팀 동명이인 → 이름 자동 부여:', _base, '→', name);
+                setMsg(signupMsg, '같은 팀에 \'' + _base + '\'님이 있어 \'' + name + '\'(으)로 등록됩니다…', 'success');
+              }
+            }
+          }catch(_e){ console.warn('[SIGNUP] 동명이인 확인 실패, 원래 이름 사용:', _e && _e.message); }
+        }
         var ins = await sb.from('app_users').insert({
           auth_id: su.data.user.id, name:name, team:bTeam, role:bRole,
           phone:phone, email:email, referrer: referrer||null, status:bStatus,
@@ -3149,17 +3167,32 @@ updateTeamBtn();
   function renderApproval(list){
     var scope=isAdminScope()?'전체 팀':(me().team||'내 팀');
     var rows=(list||[]).map(function(u){
+      var _t = String(u.team||'').replace(/['"\\]/g,'');
+      var canGo = isAdminScope() || (me().team === u.team);   /* SM=본인팀만, BM·관리자=전팀 */
+      var goBtn = canGo
+        ? '<button class="btn gold" style="margin-left:auto;flex:0 0 auto;padding:5px 12px;font-size:12px;" onclick="window.__goApproveTeam(\''+_t+'\')"><i class="fa-solid fa-arrow-up-right-from-square"></i> 바로가기</button>'
+        : '<span style="margin-left:auto;color:var(--muted);font-size:11px;">타팀 담당</span>';
       return '<div class="set-sec" style="align-items:center;gap:8px;">'
         +'<span style="font-size:13px;"><b>'+esc(u.team||'팀 미지정')+'</b> · '+esc(u.name)+'님 <span style="color:#c1121f;font-weight:700;">승인 대기중</span></span>'
-        +'<span style="margin-left:auto;color:var(--muted);font-size:12px;">'+fmtPhone(u.phone)+'</span></div>';
+        + goBtn + '</div>';
     }).join('') || '<p style="color:var(--muted);text-align:center;padding:14px;">승인 대기 중인 신청이 없습니다.</p>';
     modal('<h3><i class="fa-solid fa-user-clock"></i> 승인 대기 <span style="font-size:11px;color:var(--muted);font-weight:600;">'+scope+' · '+(list?list.length:0)+'명</span></h3>'
-      +'<p style="font-size:12px;color:var(--muted);margin:-2px 0 8px;">승인은 v35 [팀원관리]에서 진행합니다. 아래 버튼으로 이동하세요.</p>'
+      +'<p style="font-size:12px;color:var(--muted);margin:-2px 0 8px;">[바로가기]를 누르면 v35 [팀원관리]의 해당 팀 승인 화면이 바로 열립니다.</p>'
       +'<div style="max-height:300px;overflow:auto;">'+rows+'</div>'
       +'<div style="display:flex;gap:8px;margin-top:10px;">'
-      +'<button class="btn ghost" style="flex:1;" onclick="closeModal()">닫기</button>'
-      +'<button class="btn gold" style="flex:1;" onclick="window.__goV35Members()"><i class="fa-solid fa-arrow-up-right-from-square"></i> v35 팀원관리로 이동</button></div>');
+      +'<button class="btn ghost" style="flex:1;" onclick="closeModal()">닫기</button></div>');
   }
+  /* [바로가기] 해당 팀 승인 화면(v35 팀원관리)을 팀 스코프로 열기. SM은 본인팀만 허용. */
+  window.__goApproveTeam=function(team){
+    try{
+      if(!isAdminScope() && me().team !== team){
+        if(window.modal) modal('<p style="text-align:center;padding:10px;">본인 팀의 신입만 이동할 수 있습니다.</p><button class="btn" onclick="closeModal()">닫기</button>');
+        return;
+      }
+      if(typeof window.__openV35==='function'){ window.__openV35('#members', team); }
+      else { window.open('https://db-dashboard-swart.vercel.app/?t='+encodeURIComponent(team)+'#members','_blank'); }
+    }catch(e){}
+  };
   window.__goV35Members=function(){ try{ if(typeof window.__openV35==='function'){ window.__openV35('#members'); } else { window.open('https://db-dashboard-swart.vercel.app/#members','_blank'); } }catch(e){} };
 
   /* v36은 승인 '쓰기'를 하지 않음(읽기 전용 명단). 승인/거절은 v35 [팀원관리]에서만 진행. */
@@ -3170,6 +3203,40 @@ updateTeamBtn();
     window.loadStats=function(){ var r=_ls.apply(this,arguments); try{ injectBtn(); updateBadge(); }catch(e){} return r; };
   }
   ready(function(){ if(window.currentUser){ injectBtn(); updateBadge(); } });
+})();
+</script>
+
+<!-- ===== [v36 로그아웃 → 시스템설정 우측 3D 전원버튼] 원본 무삭제(주입만) ===== -->
+<script>
+(function(){
+  var _SH_UP='0 4px 10px rgba(185,28,28,.45), inset 0 2px 3px rgba(255,255,255,.55), inset 0 -3px 5px rgba(0,0,0,.28)';
+  var _SH_DN='0 2px 5px rgba(185,28,28,.4), inset 0 2px 4px rgba(0,0,0,.35)';
+  function injectLogout(){
+    try{
+      var setBtn=document.querySelector('button.btn-h[onclick*="openSettings"]');
+      if(!setBtn || !setBtn.parentNode) return;
+      if(!document.getElementById('powerLogoutBtn')){
+        var b=document.createElement('button');
+        b.id='powerLogoutBtn'; b.type='button'; b.title='로그아웃'; b.setAttribute('aria-label','로그아웃');
+        b.style.cssText=[
+          'margin-left:8px','width:38px','height:38px','border-radius:50%','border:none','cursor:pointer',
+          'display:inline-flex','align-items:center','justify-content:center','font-size:16px','color:#fff',
+          'background:radial-gradient(circle at 32% 28%, #ff8080 0%, #e23b3b 46%, #b01212 100%)',
+          'box-shadow:'+_SH_UP,'transition:transform .12s ease, box-shadow .12s ease','vertical-align:middle','flex:0 0 auto'
+        ].join(';');
+        b.innerHTML='<i class="fa-solid fa-power-off" style="filter:drop-shadow(0 1px 1px rgba(0,0,0,.35));"></i>';
+        b.onmouseenter=function(){ b.style.transform='translateY(-1px)'; };
+        b.onmousedown=function(){ b.style.transform='translateY(1px) scale(.95)'; b.style.boxShadow=_SH_DN; };
+        b.onmouseup=b.onmouseleave=function(){ b.style.transform=''; b.style.boxShadow=_SH_UP; };
+        b.onclick=function(){ var old=document.getElementById('logoutBtn'); if(old) old.click(); };
+        setBtn.parentNode.insertBefore(b, setBtn.nextSibling);   /* 설정 버튼 바로 우측 */
+      }
+      var old=document.getElementById('logoutBtn'); if(old){ old.style.display='none'; }  /* 기존 좌상단 로그아웃 숨김(로직은 재사용) */
+    }catch(e){}
+  }
+  if(typeof window.loadStats==='function'){ var _ls=window.loadStats; window.loadStats=function(){ var r=_ls.apply(this,arguments); try{ injectLogout(); }catch(e){} return r; }; }
+  if(document.readyState!=='loading') setTimeout(injectLogout,300);
+  else document.addEventListener('DOMContentLoaded', function(){ setTimeout(injectLogout,300); });
 })();
 </script>
 </body>
