@@ -1825,6 +1825,13 @@ updateTeamBtn();
   /* 새로고침 시 세션 유지: approved 세션이면 자동 진입 */
   (async function(){
     try{
+      /* [v35→v36 로그아웃] v35에서 로그아웃하면 ?logout=1 로 되돌아옴 → 세션 정리 후 v36 로그인 화면 */
+      if(/[?&]logout=1/.test(location.search)){
+        try{ await sb.auth.signOut(); }catch(_e){}
+        try{ var _u=new URL(location.href); _u.searchParams.delete('logout'); history.replaceState({}, document.title, _u.pathname + _u.search + _u.hash); }catch(_e){}
+        showLogin(); showGate();
+        return;
+      }
       var s = await sb.auth.getSession();
       if(s && s.data && s.data.session){
         var meR = await sb.from('app_users').select('*').eq('auth_id', s.data.session.user.id).single();
@@ -2650,11 +2657,6 @@ updateTeamBtn();
      팝업차단 회피: 클릭 순간 탭을 먼저 열고, 토큰 준비되면 그 탭 주소를 설정. 실패 시 일반 이동(재로그인) 폴백. */
   window.__openV35 = function(hash, teamName){
     hash = hash || ''; teamName = teamName || '';
-    var w = null;
-    try{ w = window.open('about:blank', '_blank'); }catch(e){}   /* 제스처 내 즉시 오픈(팝업차단 회피) */
-    /* 새 탭에 즉시 로딩화면(팀명) 표시 — v35 로드 전 빈 화면 방지 */
-    try{ if(w && w.document){ w.document.write('<!doctype html><meta charset="utf-8"><title>\uC774\uB3D9\uC911</title><body style="margin:0;background:#0b142e;color:#fff;font-family:system-ui,-apple-system,sans-serif;display:flex;flex-direction:column;align-items:center;justify-content:center;height:100vh;"><div style="font-size:34px;margin-bottom:14px;">\uD83D\uDEAA</div><div style="font-size:18px;font-weight:700;">'+(teamName?teamName+' ':'')+'\uC791\uC5C5\uC2E4 \uC774\uB3D9\uC911\u2026</div><div style="font-size:13px;opacity:.7;margin-top:8px;">\uC7A0\uC2DC\uB9CC \uAE30\uB2E4\uB824 \uC8FC\uC138\uC694</div></body>'); w.document.close(); } }catch(e){}
-    var go = function(u){ try{ if(w && !w.closed){ w.location.href = u; } else { window.open(u, '_blank', 'noopener'); } }catch(e){} };
     var tp = teamName ? ('&t=' + encodeURIComponent(teamName)) : '';
     (async function(){
       var url = V35_URL + (teamName ? ('?t=' + encodeURIComponent(teamName)) : '') + hash;
@@ -2680,7 +2682,7 @@ updateTeamBtn();
           } else { console.warn('[SSO] v36 세션 없음 - 일반 이동'); }
         }
       }catch(e){ console.warn('[SSO] 발급 예외, 일반 이동:', e && e.message); }
-      go(url);
+      location.href = url;   /* v36 → v35 같은 창 전환 (새 탭 X). v35에서 [바로가기] 버튼으로 복귀 */
     })();
   };
 
@@ -2997,7 +2999,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.21';
+  var VER='v36.0.23';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3176,8 +3178,11 @@ updateTeamBtn();
         +'<span style="font-size:13px;"><b>'+esc(u.team||'팀 미지정')+'</b> · '+esc(u.name)+'님 <span style="color:#c1121f;font-weight:700;">승인 대기중</span></span>'
         + goBtn + '</div>';
     }).join('') || '<p style="color:var(--muted);text-align:center;padding:14px;">승인 대기 중인 신청이 없습니다.</p>';
+    var hint = (list && list.length)
+      ? '<p style="font-size:12px;color:var(--muted);margin:-2px 0 8px;">[바로가기]를 누르면 v35 [팀원관리]의 해당 팀 승인 화면이 바로 열립니다.</p>'
+      : '';
     modal('<h3><i class="fa-solid fa-user-clock"></i> 승인 대기 <span style="font-size:11px;color:var(--muted);font-weight:600;">'+scope+' · '+(list?list.length:0)+'명</span></h3>'
-      +'<p style="font-size:12px;color:var(--muted);margin:-2px 0 8px;">[바로가기]를 누르면 v35 [팀원관리]의 해당 팀 승인 화면이 바로 열립니다.</p>'
+      +hint
       +'<div style="max-height:300px;overflow:auto;">'+rows+'</div>'
       +'<div style="display:flex;gap:8px;margin-top:10px;">'
       +'<button class="btn ghost" style="flex:1;" onclick="closeModal()">닫기</button></div>');
