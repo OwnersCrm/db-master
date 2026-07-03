@@ -1609,6 +1609,10 @@ updateTeamBtn();
       var teamMap = {'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'};
       var now = new Date();
       var ym = now.getFullYear() + '-' + String(now.getMonth()+1).padStart(2,'0');
+      // 증감 집계 기준일: 이 달(포함)부터 '당월 가입자 전원'을 증감에 반영. 그 이전(~7월)엔 신입 배지 단 사람만.
+      // (7월까지는 기존 멤버 대량 이관으로 데이터가 왜곡되므로 배지 보유자만 증감 집계 — 대장 지시)
+      var DELTA_ALL_FROM = '2026-08';
+      var deltaCountsAll = (ym >= DELTA_ALL_FROM);
       var head={t1:0,t2:0,t3:0,t4:0}, delta={t1:0,t2:0,t3:0,t4:0}, smByTeam={}, recruits=[];
       users.forEach(function(u){
         if(u.status !== 'approved') return;
@@ -1617,8 +1621,10 @@ updateTeamBtn();
         head[tk]++;
         if(u.role === 'team_manager') smByTeam[tk] = u.name;
         var joinedThisMonth = u.joined_at && String(u.joined_at).slice(0,7) === ym;
+        // 팀별 인원 증감(전월대비): 8월(DELTA_ALL_FROM)부터 당월 가입자 전원 / 그 전(~7월)은 신입 배지 단 사람만 — 대장 지시
+        if(joinedThisMonth && (deltaCountsAll || u.is_new === true)){ delta[tk]++; }
+        // 당월 신규 입사자 목록: 신입 배지(is_new)를 단 사람만
         if(joinedThisMonth && u.is_new === true){
-          delta[tk]++;
           recruits.push({ name:u.name, ref:(u.referrer || '-'), team:tk });
         }
       });
@@ -2999,7 +3005,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.35';
+  var VER='v36.0.37';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
