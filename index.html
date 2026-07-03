@@ -2999,7 +2999,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.23';
+  var VER='v36.0.25';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3242,6 +3242,78 @@ updateTeamBtn();
   if(typeof window.loadStats==='function'){ var _ls=window.loadStats; window.loadStats=function(){ var r=_ls.apply(this,arguments); try{ injectLogout(); }catch(e){} return r; }; }
   if(document.readyState!=='loading') setTimeout(injectLogout,300);
   else document.addEventListener('DOMContentLoaded', function(){ setTimeout(injectLogout,300); });
+})();
+</script>
+<!-- ===== [팀 대표(SM/BM) 실데이터 표시] 데모 이름 제거 + BM 우선 + 역할 라벨 정확 (원본 무삭제·런타임) ===== -->
+<script>
+(function(){
+  var N2I = {'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'};
+  window.__teamRep = window.__teamRep || {};
+
+  /* ① 데모 이름(박진우 등) 즉시 제거 — 가짜 이름 잔류 방지 */
+  try{ if(window.DATA && window.DATA.teams){ window.DATA.teams.forEach(function(t){ t.sm = ''; }); } }catch(e){}
+
+  /* 라벨 교정: 레이스 .rt-h + 작업실 .w-s + 챔피언 배너를 __teamRep의 역할(BM/SM)로 표기.
+     renderRace를 다시 부르지 않고 DOM만 손봐 실데이터 막대는 그대로 보존 */
+  function applyRepLabels(){
+    try{
+      var rep = window.__teamRep || {};
+      /* 레이스 행 라벨: "[N팀] 이름 역할" (역할 없으면 이름칸 비움) */
+      document.querySelectorAll('#teamRace .race-team .rt-h').forEach(function(h){
+        var m = (h.textContent||'').match(/\[(\d팀)\]/); if(!m) return;
+        var rp = rep[N2I[m[1]]]; if(!rp) return;
+        var dot = h.querySelector('.dot'); var dotHTML = dot ? dot.outerHTML : '';
+        h.innerHTML = dotHTML + '[' + m[1] + '] ' + (rp.name ? (rp.name + ' ' + rp.role) : '');
+      });
+      /* 작업실 카드: BM 팀이면 " SM 외" → " BM 외" (역할 토큰만 안전 교체) */
+      document.querySelectorAll('#workshopCards .w-s').forEach(function(s){
+        var card = s.closest('.work'); var wt = card && card.querySelector('.w-t');
+        var tn = wt && (wt.textContent||'').match(/(\d팀)/); if(!tn) return;
+        var rp = rep[N2I[tn[1]]]; if(rp && rp.role === 'BM'){ s.textContent = (s.textContent||'').replace(' SM 외', ' BM 외'); }
+      });
+      /* 챔피언 배너(1등 팀) 역할 라벨 교정 */
+      var champ = document.querySelector('.champ.team .c-big-name .sm');
+      if(champ){
+        var nm = (champ.textContent||'').replace(/\s+(SM|BM)\s*$/, '');
+        Object.keys(rep).forEach(function(tid){ if(rep[tid].name && rep[tid].name === nm){ champ.textContent = nm + ' ' + rep[tid].role; } });
+      }
+    }catch(e){ console.warn('[팀대표 라벨]', e && e.message); }
+  }
+
+  /* Supabase에서 승인된 대표 조회 → 우선순위 BM > SM. 승인 시 다음 로드에 자동 반영 */
+  async function loadReps(){
+    try{
+      if(!window.sbClient || !window.DATA || !window.DATA.teams) return;
+      var r = await window.sbClient.from('app_users').select('name,team,role,status');
+      if(r.error){ console.warn('[팀대표] 조회 실패:', r.error.message); return; }
+      var sm = {}, bm = {};
+      (r.data||[]).forEach(function(u){
+        if(u.status !== 'approved') return;
+        var tk = N2I[u.team]; if(!tk) return;
+        if(u.role === 'team_manager') sm[tk] = u.name;
+        else if(u.role === 'branch_manager') bm[tk] = u.name;
+      });
+      var rep = {};
+      window.DATA.teams.forEach(function(t){
+        if(bm[t.id]) rep[t.id] = { name: bm[t.id], role: 'BM' };        /* BM 우선 */
+        else if(sm[t.id]) rep[t.id] = { name: sm[t.id], role: 'SM' };   /* 없으면 SM */
+        else rep[t.id] = { name: '', role: '' };                        /* 둘 다 없으면 빈값 */
+        t.sm = rep[t.id].name;
+      });
+      window.__teamRep = rep;
+      if(typeof window.renderWorkshop === 'function') window.renderWorkshop();  /* 작업실 이름 반영(막대 없음·안전) */
+      applyRepLabels();
+      console.log('[팀대표] 반영(BM>SM):', rep);
+    }catch(e){ console.warn('[팀대표] 경고:', e && e.message); }
+  }
+
+  /* 월 변경 등으로 레이스/작업실이 다시 그려져도 라벨 유지 */
+  if(typeof window.renderRace === 'function'){ var _rr = window.renderRace; window.renderRace = function(){ var x = _rr.apply(this, arguments); try{ applyRepLabels(); }catch(e){} return x; }; }
+  if(typeof window.renderWorkshop === 'function'){ var _rw = window.renderWorkshop; window.renderWorkshop = function(){ var x = _rw.apply(this, arguments); try{ applyRepLabels(); }catch(e){} return x; }; }
+
+  if(typeof window.loadStats === 'function'){ var _ls = window.loadStats; window.loadStats = function(){ var x = _ls.apply(this, arguments); try{ setTimeout(loadReps, 900); }catch(e){} return x; }; }
+  if(document.readyState !== 'loading') setTimeout(loadReps, 1500);
+  else document.addEventListener('DOMContentLoaded', function(){ setTimeout(loadReps, 1500); });
 })();
 </script>
 </body>
