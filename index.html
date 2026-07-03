@@ -2999,7 +2999,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.30';
+  var VER='v36.0.31';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3425,10 +3425,21 @@ updateTeamBtn();
     };
   }
 
-  /* applyStats 이후 항상 재집계 (월 변경 등에도 유지) */
+  /* [재배정 판정 보정] v35와 동일하게: 상단 is_reassigned가 비어도 raw.isReassigned면 재배정으로 인정.
+     compute(원본) 실행 '전'에 보정 → 배정·미팅·계약·매출·KPI 전부 올바르게 재배정 분류 (v35 수치 일치) */
+  function normalizeReassign(){
+    try{
+      if(!window.__dbRecords) return;
+      window.__dbRecords.forEach(function(d){
+        if(!d.is_reassigned && d.raw && d.raw.isReassigned) d.is_reassigned = true;
+      });
+    }catch(e){ console.warn('[재배정 보정] 경고:', e && e.message); }
+  }
+
+  /* applyStats: 재배정 보정(원본 앞) → 원본 실행 → 당월 유입 재집계(원본 뒤) */
   if(typeof window.applyStats==='function'){
     var _as=window.applyStats;
-    window.applyStats=function(){ var x=_as.apply(this, arguments); try{ recomputeInflowMonthly(); }catch(e){} return x; };
+    window.applyStats=function(){ normalizeReassign(); var x=_as.apply(this, arguments); try{ recomputeInflowMonthly(); }catch(e){} return x; };
   }
 })();
 </script>
