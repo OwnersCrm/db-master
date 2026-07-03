@@ -2999,7 +2999,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.28';
+  var VER='v36.0.29';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3335,13 +3335,50 @@ updateTeamBtn();
         if(op.value==='all') return;
         op.textContent = op.value+'월' + (String(op.value)===String(cm) ? ' (현재)' : '');
       });
-      /* 기본 선택 = 전체월(전체 실데이터 표시). 원본 하드코딩 selected(6월)를 런타임으로 덮어씀.
-         강제 재렌더 없음 → loadStats의 자연 흐름이 실데이터를 주입(더미 잔류 방지) */
-      mo.value = 'all';
+      /* 기본 선택 = 현재월(해당월). 원본 하드코딩 selected(6월)를 런타임으로 덮어씀.
+         강제 재렌더 없음 → loadStats의 자연 흐름이 실데이터 주입. 데이터 없으면 더미 없이 빈 상태 */
+      mo.value = String(cm);
     }catch(e){ console.warn('[월 기본설정] 경고:', e && e.message); }
   }
   if(document.readyState!=='loading') setDefault();
   else document.addEventListener('DOMContentLoaded', setDefault);
+})();
+</script>
+<!-- ===== [더미 완전 제거 + 빈데이터 안전] 랭킹/신규 더미 비우기 + renderRace 빈랭킹 크래시 방지 (원본 무삭제·런타임) ===== -->
+<script>
+(function(){
+  /* ① 더미 데이터 제거: 실데이터가 주입되기 전에도 가짜(이재명 등)가 절대 안 보이게 비움.
+     실데이터는 applyStats(injectRanking)가 채운다. 데이터 없으면 '빈 상태'로 정직하게 표시 */
+  try{
+    if(typeof window.DATA!=='undefined' && window.DATA){
+      window.DATA.ranking = [];
+      window.DATA.recruits = [];
+    }
+  }catch(e){ console.warn('[더미제거] 경고:', e && e.message); }
+
+  /* ② renderRace 안전장치: 개인 랭킹이 비면 원본이 topPerson=undefined로 크래시 →
+     크래시 방지용 sentinel로 원본 실행 후, 챔피언 배너를 '실적 없음'으로 정리.
+     (renderRank·renderTicker는 빈배열을 이미 안전 처리하므로 renderRace만 보강) */
+  if(typeof window.renderRace === 'function'){
+    var _origRace = window.renderRace;
+    window.renderRace = function(){
+      var hasPerson = ((window.DATA && window.DATA.ranking) || []).some(function(r){ return r && r.rev > 0; });
+      if(hasPerson) return _origRace.apply(this, arguments);   /* 데이터 있으면 원본 그대로 */
+      /* 빈 랭킹: sentinel 임시 주입 → 크래시 방지 */
+      var D = window.DATA, backup = D ? D.ranking : null, x;
+      try{ if(D) D.ranking = [{ name:'', team:(D.teams && D.teams[0] ? D.teams[0].id : 't3'), ct:0, rev:1, role:'member' }]; }catch(e){}
+      try{ x = _origRace.apply(this, arguments); }catch(e){ console.warn('[레이스] 빈데이터 렌더 경고:', e && e.message); }
+      try{ if(D) D.ranking = backup; }catch(e){}
+      /* 챔피언 배너를 '실적 없음' 클린 상태로 교체 (더미 대신 정직한 빈 표시) */
+      try{
+        var cb = document.getElementById('champBanner');
+        if(cb) cb.innerHTML = '<div class="champ-banner"><div class="champ team" style="justify-content:center;text-align:center;">'
+          + '<div><div class="c-l" style="color:#94a3b8;">이번 기간</div>'
+          + '<div style="font-weight:800;color:#64748b;margin-top:2px;">실적 데이터가 없습니다</div></div></div></div>';
+      }catch(e){}
+      return x;
+    };
+  }
 })();
 </script>
 </body>
