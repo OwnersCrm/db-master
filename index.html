@@ -2999,7 +2999,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.27';
+  var VER='v36.0.28';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3317,34 +3317,31 @@ updateTeamBtn();
   else document.addEventListener('DOMContentLoaded', function(){ setTimeout(loadReps, 1500); });
 })();
 </script>
-<!-- ===== [현재 년·월 자동 설정] 상단 선택을 오늘(KST) 기준 자동 지정 (원본 옵션 무삭제·런타임) ===== -->
+<!-- ===== [상단 월 기본설정] 기본=전체월(실데이터 표시) + '(현재)' 라벨은 실제 현재월 (원본 옵션 무삭제·런타임) ===== -->
 <script>
 (function(){
   /* 오늘(한국시간) — 뷰어 시간대와 무관하게 KST 기준 */
   function kstNow(){ try{ return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Seoul'})); }catch(e){ return new Date(); } }
-  /* 상단 연/월 선택값을 현재로 지정 + '(현재)' 라벨을 실제 현재월로 이동. 모든 통계가 이 값을 참조 */
-  function setValues(){
+  function setDefault(){
     try{
       var y=document.getElementById('selYear'), mo=document.getElementById('selMonth');
-      if(!y||!mo) return false;
+      if(!y||!mo) return;
       var n=kstNow(), cy=n.getFullYear(), cm=n.getMonth()+1;
-      /* 현재 연도 옵션이 없으면 추가(장기 운영 대비) */
+      /* 현재 연도 옵션이 없으면 추가(장기 운영 대비) 후 선택 */
       if(!y.querySelector('option[value="'+cy+'"]')){ var o=document.createElement('option'); o.value=String(cy); o.textContent=cy+'년'; y.insertBefore(o, y.firstChild); }
       y.value=String(cy);
+      /* '(현재)' 라벨을 실제 현재월에만 표시(월 인식용) */
       Array.prototype.forEach.call(mo.options, function(op){
         if(op.value==='all') return;
         op.textContent = op.value+'월' + (String(op.value)===String(cm) ? ' (현재)' : '');
       });
-      mo.value=String(cm);
-      return true;
-    }catch(e){ console.warn('[현재월 자동설정] 경고:', e && e.message); return false; }
+      /* 기본 선택 = 전체월(전체 실데이터 표시). 원본 하드코딩 selected(6월)를 런타임으로 덮어씀.
+         강제 재렌더 없음 → loadStats의 자연 흐름이 실데이터를 주입(더미 잔류 방지) */
+      mo.value = 'all';
+    }catch(e){ console.warn('[월 기본설정] 경고:', e && e.message); }
   }
-  /* 값 세팅 후 전체 통계 재집계(onDateChange = KPI·레이스·유입·랭킹 실데이터 갱신) */
-  function apply(){ if(setValues() && typeof window.onDateChange==='function'){ try{ window.onDateChange(); }catch(e){} } }
-
-  if(document.readyState!=='loading') setValues(); else document.addEventListener('DOMContentLoaded', setValues);
-  if(typeof window.loadStats==='function'){ var _ls=window.loadStats; window.loadStats=function(){ var x=_ls.apply(this,arguments); try{ setTimeout(apply, 750); }catch(e){} return x; }; }
-  document.addEventListener('DOMContentLoaded', function(){ setTimeout(apply, 1600); });
+  if(document.readyState!=='loading') setDefault();
+  else document.addEventListener('DOMContentLoaded', setDefault);
 })();
 </script>
 </body>
