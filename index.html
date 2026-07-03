@@ -2999,7 +2999,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.25';
+  var VER='v36.0.27';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3255,15 +3255,16 @@ updateTeamBtn();
 
   /* 라벨 교정: 레이스 .rt-h + 작업실 .w-s + 챔피언 배너를 __teamRep의 역할(BM/SM)로 표기.
      renderRace를 다시 부르지 않고 DOM만 손봐 실데이터 막대는 그대로 보존 */
+  function escN(s){ return String(s==null?'':s).replace(/[&<>"']/g, function(c){ return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]; }); }
   function applyRepLabels(){
     try{
       var rep = window.__teamRep || {};
-      /* 레이스 행 라벨: "[N팀] 이름 역할" (역할 없으면 이름칸 비움) */
+      /* 레이스 행 라벨: "[N팀] 이름 역할" (역할 없으면 이름칸 비움). 이름은 escape(XSS 차단) */
       document.querySelectorAll('#teamRace .race-team .rt-h').forEach(function(h){
         var m = (h.textContent||'').match(/\[(\d팀)\]/); if(!m) return;
         var rp = rep[N2I[m[1]]]; if(!rp) return;
         var dot = h.querySelector('.dot'); var dotHTML = dot ? dot.outerHTML : '';
-        h.innerHTML = dotHTML + '[' + m[1] + '] ' + (rp.name ? (rp.name + ' ' + rp.role) : '');
+        h.innerHTML = dotHTML + '[' + m[1] + '] ' + (rp.name ? (escN(rp.name) + ' ' + rp.role) : '');
       });
       /* 작업실 카드: BM 팀이면 " SM 외" → " BM 외" (역할 토큰만 안전 교체) */
       document.querySelectorAll('#workshopCards .w-s').forEach(function(s){
@@ -3314,6 +3315,36 @@ updateTeamBtn();
   if(typeof window.loadStats === 'function'){ var _ls = window.loadStats; window.loadStats = function(){ var x = _ls.apply(this, arguments); try{ setTimeout(loadReps, 900); }catch(e){} return x; }; }
   if(document.readyState !== 'loading') setTimeout(loadReps, 1500);
   else document.addEventListener('DOMContentLoaded', function(){ setTimeout(loadReps, 1500); });
+})();
+</script>
+<!-- ===== [현재 년·월 자동 설정] 상단 선택을 오늘(KST) 기준 자동 지정 (원본 옵션 무삭제·런타임) ===== -->
+<script>
+(function(){
+  /* 오늘(한국시간) — 뷰어 시간대와 무관하게 KST 기준 */
+  function kstNow(){ try{ return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Seoul'})); }catch(e){ return new Date(); } }
+  /* 상단 연/월 선택값을 현재로 지정 + '(현재)' 라벨을 실제 현재월로 이동. 모든 통계가 이 값을 참조 */
+  function setValues(){
+    try{
+      var y=document.getElementById('selYear'), mo=document.getElementById('selMonth');
+      if(!y||!mo) return false;
+      var n=kstNow(), cy=n.getFullYear(), cm=n.getMonth()+1;
+      /* 현재 연도 옵션이 없으면 추가(장기 운영 대비) */
+      if(!y.querySelector('option[value="'+cy+'"]')){ var o=document.createElement('option'); o.value=String(cy); o.textContent=cy+'년'; y.insertBefore(o, y.firstChild); }
+      y.value=String(cy);
+      Array.prototype.forEach.call(mo.options, function(op){
+        if(op.value==='all') return;
+        op.textContent = op.value+'월' + (String(op.value)===String(cm) ? ' (현재)' : '');
+      });
+      mo.value=String(cm);
+      return true;
+    }catch(e){ console.warn('[현재월 자동설정] 경고:', e && e.message); return false; }
+  }
+  /* 값 세팅 후 전체 통계 재집계(onDateChange = KPI·레이스·유입·랭킹 실데이터 갱신) */
+  function apply(){ if(setValues() && typeof window.onDateChange==='function'){ try{ window.onDateChange(); }catch(e){} } }
+
+  if(document.readyState!=='loading') setValues(); else document.addEventListener('DOMContentLoaded', setValues);
+  if(typeof window.loadStats==='function'){ var _ls=window.loadStats; window.loadStats=function(){ var x=_ls.apply(this,arguments); try{ setTimeout(apply, 750); }catch(e){} return x; }; }
+  document.addEventListener('DOMContentLoaded', function(){ setTimeout(apply, 1600); });
 })();
 </script>
 </body>
