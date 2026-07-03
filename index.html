@@ -2999,7 +2999,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.29';
+  var VER='v36.0.30';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3378,6 +3378,57 @@ updateTeamBtn();
       }catch(e){}
       return x;
     };
+  }
+})();
+</script>
+<!-- ===== [A안: 당월 유입 퍼널] 배정·미팅을 접수일 기준 '선택월'로 재집계 + 전환율 NaN 안전 (원본 무삭제·런타임) ===== -->
+<script>
+(function(){
+  /* compute의 판정 로직을 그대로 복제(수치 일치 보장) — 원본은 지역 함수라 외부 접근 불가하여 동일 규칙 재현 */
+  function parseYM(s){ if(!s)return{y:0,m:0}; var d=new Date(s); if(!isNaN(d.getTime()))return{y:d.getFullYear(),m:d.getMonth()+1};
+    var p=String(s).match(/(\d{4})[.\-\/]\s?(\d{1,2})/); return p?{y:+p[1],m:+p[2]}:{y:0,m:0}; }
+  function ymMatch(s,y,m,isAll){ var p=parseYM(s); if(!p.y||p.y!==y)return false; return isAll?true:p.m===m; }
+  function normStatus(s){ s=String(s||'').trim(); if(s==='진행중')return '상담 진행중'; if(s==='대기')return '선택'; return s; }
+  function srcKey(s){ if(s==='회사DB')return '회사 DB'; if(s==='개인DB')return '개인 DB'; return '기타 DB'; }
+  function getSel(){ var y=parseInt((document.getElementById('selYear')||{}).value||'2026',10)||2026;
+    var mv=(document.getElementById('selMonth')||{}).value||'all'; var isAll=(mv==='all');
+    return {y:y, m:isAll?null:parseInt(mv,10), isAll:isAll}; }
+
+  /* 배정·미팅을 '접수일(d.date) 기준 선택월'로 재집계 → DATA.inflow의 assigned/mt만 덮어씀.
+     계약·매출(ct/rev)은 compute의 당월 값 그대로 유지 → 표 전체가 같은 기간(당월 퍼널)으로 일관 */
+  function recomputeInflowMonthly(){
+    try{
+      if(!window.__dbRecords || !window.DATA || !window.DATA.inflow) return;
+      var s=getSel();
+      var by={'회사 DB':{a:0,m:0},'개인 DB':{a:0,m:0},'기타 DB':{a:0,m:0},'재배정 DB':{a:0,m:0}};
+      window.__dbRecords.forEach(function(d){
+        if(d.is_frozen) return;
+        if(!ymMatch(d.date, s.y, s.m, s.isAll)) return;   /* 접수일 = 선택월(전체월이면 해당연도)만 카운트 */
+        var skEff = d.is_reassigned ? '재배정 DB' : srcKey(d.source);
+        if(!by[skEff]) return;
+        by[skEff].a++;                                     /* 배정: compute와 동일(비동결 전건) + 접수일 필터 */
+        var st=normStatus(d.status);
+        if(String(d.meet_status||'')==='진행' && st!=='가망고객' && st!=='계약' && st!=='종료' && st!=='청철/실효'){ by[skEff].m++; }
+      });
+      window.DATA.inflow.forEach(function(row){ var b=by[row.src]; if(b){ row.assigned=b.a; row.mt=b.m; } });
+      if(typeof window.renderInflow==='function') window.renderInflow();
+    }catch(e){ console.warn('[당월유입 재집계] 경고:', e && e.message); }
+  }
+
+  /* 전환율 0 나눗셈 → 'NaN%' 방지 (배정/미팅 0일 때 0.0%로 표시) */
+  if(typeof window.renderInflow==='function'){
+    var _ri=window.renderInflow;
+    window.renderInflow=function(){
+      var x=_ri.apply(this, arguments);
+      try{ var b=document.getElementById('inflowBody'); if(b && b.innerHTML.indexOf('NaN')>=0) b.innerHTML=b.innerHTML.replace(/NaN%/g,'0.0%'); }catch(e){}
+      return x;
+    };
+  }
+
+  /* applyStats 이후 항상 재집계 (월 변경 등에도 유지) */
+  if(typeof window.applyStats==='function'){
+    var _as=window.applyStats;
+    window.applyStats=function(){ var x=_as.apply(this, arguments); try{ recomputeInflowMonthly(); }catch(e){} return x; };
   }
 })();
 </script>
