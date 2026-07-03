@@ -2999,7 +2999,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.31';
+  var VER='v36.0.32';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3431,15 +3431,80 @@ updateTeamBtn();
     try{
       if(!window.__dbRecords) return;
       window.__dbRecords.forEach(function(d){
-        if(!d.is_reassigned && d.raw && d.raw.isReassigned) d.is_reassigned = true;
+        if(d.is_reassigned) return;
+        if(d.raw && d.raw.isReassigned){ d.is_reassigned = true; return; }   /* raw 플래그 */
+        var s=String(d.source||'').replace(/\s/g,'');                          /* 출처값이 재배정DB인 경우도 재배정 */
+        if(s==='재배정DB' || s==='재배정'){ d.is_reassigned = true; }
       });
     }catch(e){ console.warn('[재배정 보정] 경고:', e && e.message); }
   }
 
-  /* applyStats: 재배정 보정(원본 앞) → 원본 실행 → 당월 유입 재집계(원본 뒤) */
+  /* [연간 차트 확장] 원본은 1~6월만 표시(months 6개 하드코딩 + injectRace가 slice(0,6)).
+     현재월까지(과거연도는 12개월) 표시하도록: computeMonthly를 복제해 월별 매출 재산출 →
+     차트 렌더 시에만 curM/prevM을 전체월 배열로 스왑(race 등 다른 렌더는 6개월 유지, 영향 0). */
+  function teamKey(t){ return ({'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'})[t]||null; }
+  function isExternal(n){ if(!n)return false; if(n==='회사')return true; return /\d.*팀/.test(n); }
+  function getDBContracts(d){ var st=String(d.status||'').trim(); if(st!=='계약'&&st!=='청철/실효')return [];
+    if(Array.isArray(d.contracts)&&d.contracts.length)return d.contracts;
+    if(d.raw&&Array.isArray(d.raw.contracts)&&d.raw.contracts.length)return d.raw.contracts; return []; }
+  function computeMonthlyFull(recs, year){
+    var byTeam={t1:new Array(12).fill(0),t2:new Array(12).fill(0),t3:new Array(12).fill(0),t4:new Array(12).fill(0)};
+    (recs||[]).forEach(function(d){
+      if(d.is_frozen) return;
+      if(normStatus(d.status)!=='계약') return;
+      var tk=teamKey(d.team); if(!tk) return;
+      getDBContracts(d).forEach(function(c){
+        if(c.isLapsed) return;
+        var p=parseYM(c.date||d.date); if(p.y!==year||p.m<1||p.m>12) return;
+        var amt=safeNum2(c.totalAmount||c.amount);
+        (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum2(s2.amount)>0) amt-=safeNum2(s2.amount); });
+        byTeam[tk][p.m-1]+=amt;
+      });
+    });
+    Object.keys(byTeam).forEach(function(tk){ byTeam[tk]=byTeam[tk].map(function(v){return Math.round(v/10000);}); });
+    return byTeam;
+  }
+  function safeNum2(v){ if(v==null)return 0; if(typeof v==='number')return isFinite(v)?v:0; return parseInt(String(v).replace(/,/g,''),10)||0; }
+  function kstNow(){ try{ return new Date(new Date().toLocaleString('en-US',{timeZone:'Asia/Seoul'})); }catch(e){ return new Date(); } }
+  function extendChartData(){
+    try{
+      if(!window.__dbRecords || !window.DATA || !window.DATA.teams) return;
+      var n=kstNow(), cy=n.getFullYear(), cm=n.getMonth()+1;
+      var selY=parseInt((document.getElementById('selYear')||{}).value||String(cy),10)||cy;
+      var show=(selY<cy)?12:cm;                       /* 과거연도=12개월, 올해=1~현재월 */
+      var cur=computeMonthlyFull(window.__dbRecords, selY);
+      var prev=computeMonthlyFull(window.__dbRecords, selY-1);
+      window.DATA.teams.forEach(function(t){
+        t.__curMfull=(cur[t.id]||new Array(12).fill(0)).slice(0,show);
+        t.__prevMfull=(prev[t.id]||new Array(12).fill(0)).slice(0,show);
+      });
+      var labels=[]; for(var i=1;i<=show;i++) labels.push(i+'월');
+      window.DATA.months=labels;                      /* 차트 라벨만 확장(차트 전용) */
+    }catch(e){ console.warn('[차트 확장] 경고:', e && e.message); }
+  }
+  /* renderChart 래핑: 차트 그릴 때만 전체월 배열로 스왑 → 그 외 렌더(race)는 6개월 그대로 */
+  if(typeof window.renderChart==='function'){
+    var _rc=window.renderChart;
+    window.renderChart=function(){
+      var bk=[];
+      (window.DATA&&DATA.teams||[]).forEach(function(t){ bk.push([t.curM,t.prevM]); if(t.__curMfull){ t.curM=t.__curMfull; t.prevM=t.__prevMfull; } });
+      var x;
+      try{ x=_rc.apply(this, arguments); }catch(e){ console.warn('[차트 렌더 경고]', e&&e.message); }
+      (window.DATA&&DATA.teams||[]).forEach(function(t,i){ if(bk[i]){ t.curM=bk[i][0]; t.prevM=bk[i][1]; } });
+      return x;
+    };
+  }
+
+  /* applyStats: 재배정 보정(앞) → 원본 → 당월 유입 재집계 + 차트 확장 재렌더(뒤) */
   if(typeof window.applyStats==='function'){
     var _as=window.applyStats;
-    window.applyStats=function(){ normalizeReassign(); var x=_as.apply(this, arguments); try{ recomputeInflowMonthly(); }catch(e){} return x; };
+    window.applyStats=function(){
+      normalizeReassign();
+      var x=_as.apply(this, arguments);
+      try{ recomputeInflowMonthly(); }catch(e){}
+      try{ extendChartData(); if(typeof window.renderChart==='function') window.renderChart(); }catch(e){}
+      return x;
+    };
   }
 })();
 </script>
