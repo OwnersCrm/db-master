@@ -1646,6 +1646,14 @@ updateTeamBtn();
       {name:me.name, team:me.team, role:me.role, status:me.status});
     window.currentUser = me;
 
+    /* [v36.0.38] 사용자 전환 시 이전 사용자 통계·차트 잔존 방지 — 로그인마다 데이터 캐시 초기화
+       (인터넷 창을 닫지 않고 로그아웃→재로그인해도, 캐시를 비워 새 세션 기준으로 재조회) */
+    try{
+      window.__dbRecords   = null;   // db_records 캐시 → 새 세션으로 강제 재조회
+      window.__statsRetried = false; // 통계 재시도 플래그 초기화
+      window.__chartBranch  = false; // 연간 차트 '지점' 토글 상태 초기화
+    }catch(_e){}
+
     /* [v15 / 2-4a] 실제 로그인 권한을 대시보드에 반영 (데모 셀렉트 대체) */
     try{
       var roleMap = {system_admin:'system_admin', branch_manager:'BM', team_manager:'SM', member:'member'};
@@ -1824,6 +1832,8 @@ updateTeamBtn();
   document.getElementById('link-forgot-to-login').addEventListener('click', showLogin);
   logoutBtn.addEventListener('click', async function(){
     try{ await sb.auth.signOut(); }catch(e){}
+    /* [v36.0.38] 로그아웃 즉시 통계 캐시 비움 — 다음 로그인 사용자에게 이전 통계 노출 방지 */
+    try{ window.__dbRecords=null; window.__statsRetried=false; window.__chartBranch=false; }catch(_e){}
     phoneIn.value=''; pwIn.value=''; setMsg(loginMsg,''); showLogin(); showGate();
     console.log('[LOGIN] 로그아웃');
   });
@@ -3005,7 +3015,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.37';
+  var VER='v36.0.38';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
