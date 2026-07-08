@@ -1752,8 +1752,19 @@ updateTeamBtn();
       var su = await sb.auth.signUp({ email:email, password:pw, options:{ data:{ name:name, phone:phone } } });
       if(su.error) throw su.error;
       if(!su.data.user) throw new Error('가입은 됐지만 사용자 정보를 받지 못했습니다.');
-      var si = await sb.auth.signInWithPassword({ email:email, password:pw });
-      if(si.error) throw si.error;
+      // v36.0.39 방탄: signUp이 세션을 주면(이메일확인 OFF) 재로그인 생략. 없으면(ON) 재로그인 시도 후 원인 명확화.
+      if(!su.data.session){
+        var si = await sb.auth.signInWithPassword({ email:email, password:pw });
+        if(si.error){
+          if(/Invalid login credentials|Email not confirmed|not confirmed/i.test(si.error.message||'')){
+            console.error('[SIGNUP] 자동로그인 차단 — Supabase "Confirm email"(이메일 확인) 설정이 켜져 있습니다. 대시보드 Authentication에서 꺼주세요.');
+            throw new Error('계정 생성은 됐지만 자동 로그인이 막혔습니다.\n관리자에게 문의해주세요. (Supabase 이메일 확인 설정 OFF 필요)');
+          }
+          throw si.error;
+        }
+      } else {
+        console.log('[SIGNUP] signUp 세션 확보(이메일확인 OFF) — 재로그인 생략');
+      }
       if(existingUser){
         var up = await sb.from('app_users').update({
           auth_id: su.data.user.id, phone:phone, email:email,
@@ -3015,7 +3026,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.38';
+  var VER='v36.0.39';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
