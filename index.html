@@ -494,9 +494,11 @@ section.sec{scroll-margin-top:150px;}
         <option value="BM" selected>BM (지점장)</option>
         <option value="SM">SM (3팀)</option>
         <option value="member">팀원 (1팀)</option>
+        <option value="db_manager">DB관리자</option>
       </select>
     </div>
     <div class="who" style="text-align:right;"><b id="whoName">김지훈</b><br><span id="whoRole">BM 권한 접속중</span></div>
+    <button class="btn-h" id="btnDbDist" style="display:none;" onclick="openDbDist()"><i class="fa-solid fa-rocket"></i> DB 배포 관제</button>
     <button class="btn-h" onclick="openSettings()"><i class="fa-solid fa-gear"></i> 시스템 설정</button>
   </div>
 </header>
@@ -795,7 +797,7 @@ function renderInflow(){
   el('inflowBody').innerHTML = rows;
 }
 /* ====== 게시판 공통 엔진 ====== */
-var ADMIN_ROLES=['system_admin','BM','SM'];
+var ADMIN_ROLES=['system_admin','BM','SM','db_manager']; /* [STEP 3-D] DB관리자 = 메인보드 SM 동일 권한 */
 function canWriteBoard(k){ return k==='free' ? true : ADMIN_ROLES.indexOf(DATA.role)>=0; }
 function canDeleteBoard(){ return ADMIN_ROLES.indexOf(DATA.role)>=0; }
 function boardData(k){ return k==='notice'?DATA.notices:DATA.free; }
@@ -1238,7 +1240,7 @@ function renderAnchors(){
 
 /* ====================== 상호작용 ====================== */
 function onDateChange(){ renderKPI(); renderRace(); renderPromo(); renderAnchors(); }
-var ROLE_PRESET={ system_admin:{name:'관리자',label:'시스템관리자',team:'t3'}, BM:{name:'김지훈',label:'BM 권한 접속중',team:'t3'}, SM:{name:'김지훈',label:'SM · 3팀 매니저',team:'t3'}, member:{name:'박진우',label:'팀원 · 1팀',team:'t1'} };
+var ROLE_PRESET={ system_admin:{name:'관리자',label:'시스템관리자',team:'t3'}, BM:{name:'김지훈',label:'BM 권한 접속중',team:'t3'}, SM:{name:'김지훈',label:'SM · 3팀 매니저',team:'t3'}, member:{name:'박진우',label:'팀원 · 1팀',team:'t1'}, db_manager:{name:'DB관리자',label:'DB관리자 · 배포 운영',team:'t1'} };
 function onRoleChange(){
   DATA.role=el('roleDemo').value;
   var p=ROLE_PRESET[DATA.role]; DATA.curUserTeam=p.team;
@@ -1247,6 +1249,7 @@ function onRoleChange(){
   renderChartChips(); renderChart();
   renderNotices(); renderFree();        // 권한 따라 삭제버튼 갱신
   updateTeamBtn();                       // 팀별현황 버튼 권한 상태
+  updateDbDistBtn();                     // [STEP 3-D] 배포 관제 버튼 표시 갱신
 }
 function openRankAll(){
   var list=DATA.ranking.filter(function(r){return r.rev>0;}).sort(function(a,b){return b.rev-a.rev;});
@@ -1254,8 +1257,26 @@ function openRankAll(){
     +'<div style="max-height:60vh;overflow:auto;">'+list.map(function(r,i){return rankRowHTML(r,i,true);}).join('')+'</div>'
     +'<button class="btn" style="width:100%;margin-top:14px;" onclick="closeModal()">닫기</button>');
 }
+/* [STEP 3-D] DB 배포 관제 — db관리자·시스템관리자·BM만 노출 (배포 운영권한 보유자) */
+function updateDbDistBtn(){
+  var b=el('btnDbDist'); if(!b) return;
+  var can = ['db_manager','system_admin','BM'].indexOf(DATA.role)>=0;
+  b.style.display = can ? '' : 'none';
+}
+function openDbDist(){
+  modal('<div style="text-align:center;"><div style="font-size:38px;">🚀</div><h3 style="justify-content:center;">DB 배포 관제 시스템</h3>'
+    +'<p style="color:var(--ink2);">DB 자동 배분·회수 관제 시스템은 <b>연동 단계에서 이 화면에 임베드</b>됩니다.<br><span style="font-size:12px;color:var(--muted);">(현재 프로토타입 단계 — 실제 배분 엔진 연결 예정)</span></p>'
+    +'<button class="btn" style="width:100%;margin-top:10px;" onclick="closeModal()">확인</button></div>');
+}
 function enterTeam(id){
   var t=teamById(id); var mine=(id===DATA.curUserTeam);
+  /* [STEP 3-D] DB관리자는 배포 운영 전용 — 팀 작업실 입장 전면 제한 */
+  if(DATA.role==='db_manager'){
+    modal('<div style="text-align:center;"><div style="font-size:38px;">🚫</div><h3 style="justify-content:center;">작업실 입장 제한</h3>'
+      +'<p style="color:var(--ink2);"><b>DB관리자</b>는 팀 전용 작업실에 입장할 수 없습니다.<br><span style="font-size:12px;color:var(--muted);">(DB관리자는 배포 관제·전사 현황 열람 권한만 보유)</span></p>'
+      +'<button class="btn ghost" style="width:100%;margin-top:10px;" onclick="closeModal()">닫기</button></div>');
+    return;
+  }
   if(DATA.role==='BM'||DATA.role==='system_admin'||mine){
     modal('<div style="text-align:center;"><div style="font-size:38px;">🚪</div><h3 style="justify-content:center;">'+t.name+' 작업실 접속</h3>'
       +'<p style="color:var(--ink2);">'+t.name+' v35 영업관리 시스템으로 이동합니다.<br><span style="font-size:12px;color:var(--muted);">(프로토타입에서는 실제 v35가 연결되지 않습니다.)</span></p>'
@@ -1275,6 +1296,8 @@ function currentSecOrder(){
   return Array.from(document.querySelectorAll('main > section[data-sec]')).map(function(s){return s.dataset.sec;});
 }
 function openSettings(focus){
+  /* [STEP 3-E fix] DB관리자는 시스템설정 버튼 무동작 — 비밀번호 변경은 향후 'DB 배포 관제' UI 내에서 제공(연동 구현) */
+  if(DATA.role==='db_manager'){ return; }
   if(DATA.role!=='system_admin'){
     modal('<div style="text-align:center;"><div style="font-size:38px;">🔒</div><h3 style="justify-content:center;">시스템 설정 — 접근 제한</h3>'
       +'<p style="color:var(--ink2);">시스템 설정은 <b>시스템관리자</b>만 열 수 있습니다.<br>(브랜딩·테마·팀·섹션 구성 변경)</p>'
@@ -1346,6 +1369,8 @@ function renderSettingsModal(){
     +'<div style="border-top:1px solid var(--line);margin:4px 0 14px;"></div>'
     +'<div id="setTeamsAnchor" class="field"><label>팀 설정 (이름 · 색 · 월 목표 만원)</label>'+teamRows+addTeamUI+'</div>'
     +'<div class="field"><label>섹션 표시 / 순서</label>'+secRows+'</div>'
+    +'<div style="border-top:1px solid var(--line);margin:4px 0 12px;"></div>'
+    +'<div class="field"><label>내 비밀번호 변경 <span style="color:var(--muted);font-weight:400;">(현재 로그인 계정 · 6자 이상)</span></label>'+pwFieldsHtml()+'</div>'
     +'<div style="display:flex;gap:8px;margin-top:6px;"><button class="btn ghost" style="flex:1;" onclick="cancelSettings()">취소</button><button class="btn gold" style="flex:2;" onclick="applySettings()">저장 · 적용</button></div>');
 }
 function toggleSecHidden(id){var i=secEditHidden.indexOf(id); if(i>=0)secEditHidden.splice(i,1); else secEditHidden.push(id);}
@@ -1398,6 +1423,35 @@ function applyLayout(){
   var main=el('main');
   (SETTINGS.order||currentSecOrder()).forEach(function(id){var s=document.querySelector('main > section[data-sec="'+id+'"]'); if(s)main.appendChild(s);});
   Array.from(document.querySelectorAll('main > section[data-sec]')).forEach(function(s){s.style.display=(SETTINGS.hidden||[]).indexOf(s.dataset.sec)>=0?'none':'';});
+}
+
+/* ====================== [STEP 3-E] 비밀번호 변경 (본인 계정 · Supabase Auth updateUser) ====================== */
+/* service_role 불필요 — 로그인된 본인 계정 비번만 변경. 남 계정 리셋은 연동 시 서버함수(RPC)로 예정. */
+function pwFieldsHtml(){
+  return '<input class="inp" type="password" id="pwNew" placeholder="새 비밀번호 (6자 이상)" autocomplete="new-password" style="margin-bottom:6px;">'
+    +'<input class="inp" type="password" id="pwNew2" placeholder="새 비밀번호 확인" autocomplete="new-password" style="margin-bottom:6px;">'
+    +'<button class="btn sm" onclick="changeMyPassword()"><i class="fa-solid fa-key"></i> 비밀번호 변경</button>';
+}
+function openMyPassword(){
+  modal('<h3><i class="fa-solid fa-key"></i> 비밀번호 변경 <span style="font-size:11px;color:var(--muted);font-weight:600;">본인 계정</span></h3>'
+    +'<div class="field"><label>새 비밀번호 <span style="color:var(--muted);font-weight:400;">(6자 이상)</span></label>'+pwFieldsHtml()+'</div>'
+    +'<button class="btn ghost" style="width:100%;margin-top:6px;" onclick="closeModal()">닫기</button>');
+}
+function _pwMsg(icon,title,msg){
+  modal('<div style="text-align:center;"><div style="font-size:36px;">'+icon+'</div><h3 style="justify-content:center;">'+title+'</h3>'
+    +'<p style="color:var(--ink2);">'+msg+'</p><button class="btn" style="width:100%;margin-top:10px;" onclick="closeModal()">확인</button></div>');
+}
+async function changeMyPassword(){
+  var a=el('pwNew'), b=el('pwNew2'); if(!a||!b) return;
+  var np=a.value||'', np2=b.value||'';
+  if(np.length<6){ _pwMsg('⚠️','비밀번호가 짧습니다','6자 이상 입력해 주세요.'); return; }
+  if(np!==np2){ _pwMsg('⚠️','확인 불일치','두 비밀번호가 일치하지 않습니다.'); return; }
+  try{
+    if(typeof sb==='undefined' || !sb || !sb.auth || !sb.auth.updateUser){ throw new Error('인증 세션이 없습니다. 다시 로그인해 주세요.'); }
+    var r=await sb.auth.updateUser({ password:np });
+    if(r && r.error) throw r.error;
+    _pwMsg('✅','변경 완료','비밀번호가 변경되었습니다.<br><span style="font-size:12px;color:var(--muted);">다음 로그인부터 새 비밀번호를 사용하세요.</span>');
+  }catch(e){ _pwMsg('❌','변경 실패', (e&&e.message)||'알 수 없는 오류'); }
 }
 
 /* ====================== 모달 공통 ====================== */
@@ -1656,7 +1710,7 @@ updateTeamBtn();
 
     /* [v15 / 2-4a] 실제 로그인 권한을 대시보드에 반영 (데모 셀렉트 대체) */
     try{
-      var roleMap = {system_admin:'system_admin', branch_manager:'BM', team_manager:'SM', member:'member'};
+      var roleMap = {system_admin:'system_admin', branch_manager:'BM', team_manager:'SM', member:'member', db_manager:'db_manager'};
       var teamMap = {'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'};
       var vRole = roleMap[me.role] || 'member';
       var vTeam = teamMap[me.team] || 't1';
@@ -1668,11 +1722,12 @@ updateTeamBtn();
         try{ window.chartSel = [vTeam]; }catch(_e){}
         if(typeof window.renderAll === 'function') window.renderAll();
         if(typeof window.updateTeamBtn === 'function') window.updateTeamBtn();
+        if(typeof window.updateDbDistBtn === 'function') window.updateDbDistBtn();  // [STEP 3-D]
       }
     }catch(e){ console.warn('[2-4a] 권한 반영 경고:', e && e.message); }
 
     var who = document.getElementById('whoName'); if(who) who.textContent = me.name || '';
-    var roleKor = {system_admin:'시스템관리자', branch_manager:'BM(지점장)', team_manager:'SM', member:'팀원'};
+    var roleKor = {system_admin:'시스템관리자', branch_manager:'BM(지점장)', team_manager:'SM', member:'팀원', db_manager:'DB관리자'};
     var teamKor = (me.team && me.team !== '전체') ? ' · ' + me.team : '';
     var wr = document.getElementById('whoRole'); if(wr) wr.textContent = (roleKor[me.role]||me.role) + teamKor + ' 권한 접속중';
     hideGate();
@@ -1752,19 +1807,8 @@ updateTeamBtn();
       var su = await sb.auth.signUp({ email:email, password:pw, options:{ data:{ name:name, phone:phone } } });
       if(su.error) throw su.error;
       if(!su.data.user) throw new Error('가입은 됐지만 사용자 정보를 받지 못했습니다.');
-      // v36.0.39 방탄: signUp이 세션을 주면(이메일확인 OFF) 재로그인 생략. 없으면(ON) 재로그인 시도 후 원인 명확화.
-      if(!su.data.session){
-        var si = await sb.auth.signInWithPassword({ email:email, password:pw });
-        if(si.error){
-          if(/Invalid login credentials|Email not confirmed|not confirmed/i.test(si.error.message||'')){
-            console.error('[SIGNUP] 자동로그인 차단 — Supabase "Confirm email"(이메일 확인) 설정이 켜져 있습니다. 대시보드 Authentication에서 꺼주세요.');
-            throw new Error('계정 생성은 됐지만 자동 로그인이 막혔습니다.\n관리자에게 문의해주세요. (Supabase 이메일 확인 설정 OFF 필요)');
-          }
-          throw si.error;
-        }
-      } else {
-        console.log('[SIGNUP] signUp 세션 확보(이메일확인 OFF) — 재로그인 생략');
-      }
+      var si = await sb.auth.signInWithPassword({ email:email, password:pw });
+      if(si.error) throw si.error;
       if(existingUser){
         var up = await sb.from('app_users').update({
           auth_id: su.data.user.id, phone:phone, email:email,
@@ -2723,6 +2767,14 @@ updateTeamBtn();
     var t = (typeof teamById==='function') ? teamById(id) : null;
     if(!t) return;
     var mine = (id === DATA.curUserTeam);
+    /* [STEP 3-D fix] DB관리자는 팀 작업실 입장 전면 차단 — 오버라이드에도 동일 적용 (curUserTeam 기본값 우회 방지) */
+    if(DATA.role==='db_manager'){
+      modal('<div style="text-align:center;"><div style="font-size:38px;">\uD83D\uDEAB</div>'
+        +'<h3 style="justify-content:center;">\uC791\uC5C5\uC2E4 \uC785\uC7A5 \uC81C\uD55C</h3>'
+        +'<p style="color:var(--ink2);"><b>DB\uAD00\uB9AC\uC790</b>\uB294 \uD300 \uC804\uC6A9 \uC791\uC5C5\uC2E4\uC5D0 \uC785\uC7A5\uD560 \uC218 \uC5C6\uC2B5\uB2C8\uB2E4.<br><span style="font-size:12px;color:var(--muted);">(DB\uAD00\uB9AC\uC790\uB294 \uBC30\uD3EC \uAD00\uC81C\u00B7\uC804\uC0AC \uD604\uD669 \uC5F4\uB78C \uAD8C\uD55C\uB9CC \uBCF4\uC720)</span></p>'
+        +'<button class="btn ghost" style="width:100%;margin-top:10px;" onclick="closeModal()">\uB2EB\uAE30</button></div>');
+      return;
+    }
     if(DATA.role==='BM' || DATA.role==='system_admin' || mine){
       /* 본인팀/관리자: 중간 안내 팝업 없이 즉시 v35로 이동 (SSO 무클릭, 팀명 전달) */
       window.openV35Workspace(t.name);
@@ -3026,7 +3078,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.39';
+  var VER='v36.0.40';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
