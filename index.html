@@ -339,6 +339,36 @@ section.sec{scroll-margin-top:150px;}
   .kpi-grid{grid-template-columns:1fr;} .boards,.race-grid,.recruit-grid,.promo-grid{grid-template-columns:1fr;}
   .work-grid{grid-template-columns:1fr 1fr;} main{padding:16px;}
 }
+/* v36.0.41: 모바일 헤더 컴팩트 + 그래프 생략 (≤768px 전용, PC(≥769px) 완전 불변) */
+@media(max-width:768px){
+  /* ① 헤더가 화면 절반 가림 fix — 세로 글자깨짐 방지 + 컴팩트 + 데모직급(개발용) 숨김 */
+  .header{ padding:8px 12px; }
+  .header.between{ flex-wrap:wrap; gap:8px 10px; }
+  .header .demo-role{ display:none; }
+  .who{ white-space:nowrap; line-height:1.25; }
+  .who b{ font-size:12px; } .who span{ font-size:10px; white-space:nowrap; }
+  .brand-text b{ font-size:15px; }
+  .brand-logo{ width:28px; height:28px; font-size:14px; }
+  .date-sel{ padding:5px 8px; font-size:12px; }
+  .btn-h{ padding:6px 9px; font-size:11px; }
+  /* ② 연간 매출 추이 그래프 — 모바일 생략(팀이동·실적·게시판 집중) */
+  main > section[data-sec="chart"]{ display:none !important; }
+  /* ③ 레이스 상단카드: 팀명 아래 '이름 직급' 한 줄(버그4) + 금액 점(·) 제거·세로 정렬(버그3) */
+  .champ{ padding:12px 14px; gap:10px; }
+  .champ .c-big-name{ font-size:20px; }
+  .champ .c-big-name .sm{ display:block; margin-left:0; margin-top:2px; font-size:12px; }
+  .champ .c-amt{ display:flex; flex-direction:column; align-items:flex-end; line-height:1.35; }
+  .champ .c-amt .c-amt-sep{ display:none; }
+  /* ④ 작업실 바로가기 플로팅 버튼 (모바일 전용, 반투명·비침습) */
+  #jumpWorkBtn{
+    display:flex; align-items:center; justify-content:center;
+    position:fixed; right:14px; bottom:18px; z-index:80;
+    width:44px; height:44px; border-radius:50%;
+    background:rgba(15,23,42,.72); color:#fff; border:none;
+    box-shadow:0 4px 14px rgba(0,0,0,.28); font-size:17px; opacity:.8;
+  }
+  #jumpWorkBtn:active{ opacity:1; }
+}
 /* ===== v36.2 수정 추가 ===== */
 .demo-role{display:flex;align-items:center;gap:6px;background:#fff7e0;border:1px dashed var(--gold);border-radius:9px;padding:5px 9px;}
 .demo-role span{font-size:10px;font-weight:800;color:#8a6d12;}
@@ -363,6 +393,12 @@ section.sec{scroll-margin-top:150px;}
 .blist li .b-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
 .blist li .b-date{font-size:11px;color:var(--muted);white-space:nowrap;flex:none;}
 .blist li .b-del{color:var(--danger);font-size:12px;opacity:.6;flex:none;}
+/* v36.0.42: 새 글 NEW 뱃지 — 제목 우측, 반짝임(7일 유효) */
+.b-new{flex:none;margin-left:6px;padding:1px 6px;border-radius:6px;font-size:9px;font-weight:900;letter-spacing:.3px;color:#fff;background:linear-gradient(135deg,#f43f5e,#f59e0b);box-shadow:0 0 6px rgba(244,63,94,.55);animation:bNewGlow 1.3s ease-in-out infinite;}
+@keyframes bNewGlow{0%,100%{box-shadow:0 0 4px rgba(244,63,94,.4);opacity:.9;}50%{box-shadow:0 0 11px rgba(245,158,11,.85);opacity:1;}}
+@media(prefers-reduced-motion:reduce){ .b-new{animation:none;} }
+/* v36.0.42: 작업실 바로가기 플로팅 버튼 — 기본 숨김(PC 미표시), 모바일에서만 노출 */
+#jumpWorkBtn{ display:none; }
 .blist li .b-del:hover{opacity:1;}
 /* 리치 에디터 */
 .editor-tb{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:8px;align-items:center;}
@@ -611,6 +647,9 @@ section.sec{scroll-margin-top:150px;}
   </section>
 </main>
 
+<!-- v36.0.42: 모바일 전용 — 작업실 바로가기(하단 이동) 플로팅 버튼 -->
+<button id="jumpWorkBtn" type="button" onclick="jumpToWorkshop()" aria-label="작업실로 이동" title="작업실로 이동"><i class="fa-solid fa-angles-down"></i></button>
+
 <!-- 모달 -->
 <div class="mask" id="modalMask"><div class="modal" id="modalBox"></div></div>
 
@@ -757,7 +796,8 @@ function countUp(node,target,prefix,suffix){
 /* ====================== 렌더 ====================== */
 /* [v26] expose */ window.renderTicker=renderTicker;
 function renderTicker(){
-  var items = DATA.ranking.slice(0,6).map(function(r){var t=teamById(r.team);
+  // v36.0.42: 매출 0원(계약 없음)은 LIVE 명단에서 제외
+  var items = DATA.ranking.filter(function(r){return (r.rev||0)>0;}).slice(0,6).map(function(r){var t=teamById(r.team);
     return '<span class="tk-item">🏆 ['+t.name+'] '+r.name+' <span class="amt">'+won(r.rev)+'원</span></span>';}).join('');
   el('tickerTrack').innerHTML = items;
 }
@@ -805,8 +845,12 @@ function snippet(html){ var d=document.createElement('div'); d.innerHTML=html||'
 function boardRowHTML(k,p){
   var badge = k==='notice' ? (p.type==='필독'?'<span class="bp">필독</span>':'<span class="bn">일반</span>') : '<span class="bn">익명</span>';
   var del = canDeleteBoard() ? '<span class="b-del" title="삭제" onclick="event.stopPropagation();deletePost(\''+k+'\',\''+p.id+'\')"><i class="fa-solid fa-trash"></i></span>' : '';
+  // v36.0.42: 새 글 NEW 뱃지(반짝임) — 작성 7일 이내만. 작성시각은 ts 또는 id('p'+Date.now())에서 추출
+  var _ts = p.ts || (String(p.id).charAt(0)==='p' ? parseInt(String(p.id).slice(1),10) : 0);
+  var _isNew = _ts && (Date.now() - _ts) < 7*24*60*60*1000;
+  var newBadge = _isNew ? '<span class="b-new">NEW</span>' : '';
   return '<li onclick="viewPost(\''+k+'\',\''+p.id+'\')">'+badge
-    +'<span class="b-title" style="font-weight:'+(p.type==='필독'?'800':'600')+';">'+p.title+'</span>'
+    +'<span class="b-title" style="font-weight:'+(p.type==='필독'?'800':'600')+';">'+p.title+'</span>'+newBadge
     +'<span class="b-date">'+p.date+'</span>'+del+'</li>';
 }
 function renderNotices(){
@@ -903,7 +947,7 @@ function savePost(k){
   var title=(el('postTitle').value||'').trim(); if(!title){ el('postTitle').focus(); return; }
   var body=el('postBody').innerHTML||'';
   var today=new Date(); var dt=('0'+(today.getMonth()+1)).slice(-2)+'-'+('0'+today.getDate()).slice(-2);
-  var post={id:'p'+Date.now(),title:title,body:body,date:dt};
+  var post={id:'p'+Date.now(),title:title,body:body,date:dt,ts:Date.now()};
   if(k==='notice'){ post.type=el('postType').value; post.author=DATA.role; post.attach=_editAttach.slice(); DATA.notices.unshift(post); noticeFilter='전체'; if(el('filtPin'))el('filtPin').textContent='필독만'; renderNotices(); }
   else { DATA.free.unshift(post); renderFree(); }
   closeModal();
@@ -947,16 +991,16 @@ function renderRace(){
   var pRole=roleKor[topPerson.role]||'팀장';
   el('champBanner').innerHTML='<div class="champ-banner">'
     +'<div class="champ team"><span class="c-glow"></span><div class="c-medal">🏆</div>'
-      +'<div class="c-big"><span class="c-big-name" style="color:'+topTeam.t.color+'">'+topTeam.t.name+'<span class="sm">'+topTeam.t.sm+' SM</span></span></div>'
-      +'<div class="c-side"><div class="c-l">이번달 1등 팀</div><div class="c-amt">매출 '+won(topTeam.cur)+'만원 · 계약 '+topTeamCt+'건</div></div></div>'
+      +'<div class="c-big"><span class="c-big-name" style="color:'+topTeam.t.color+'">'+topTeam.t.name+'<span class="sm">'+topTeam.t.sm+' '+(topTeam.t.smRole||'SM')+'</span></span></div>'
+      +'<div class="c-side"><div class="c-l">이번달 1등 팀</div><div class="c-amt"><span class="c-amt-a">매출 '+won(topTeam.cur)+'만원</span><span class="c-amt-sep"> · </span><span class="c-amt-b">계약 '+topTeamCt+'건</span></div></div></div>'
     +'<div class="champ person"><span class="c-glow"></span><div class="c-medal">👑</div>'
       +'<div class="c-big"><span class="c-big-name">'+topPerson.name+'<span class="sm" style="color:'+pT.color+'">'+pT.name+' '+pRole+'</span></span></div>'
-      +'<div class="c-side"><div class="c-l">개인 매출 1위</div><div class="c-amt">'+won(topPerson.rev)+'원 · 계약 '+topPerson.ct+'건</div></div></div></div>';
+      +'<div class="c-side"><div class="c-l">개인 매출 1위</div><div class="c-amt"><span class="c-amt-a">'+won(topPerson.rev)+'원</span><span class="c-amt-sep"> · </span><span class="c-amt-b">계약 '+topPerson.ct+'건</span></div></div></div></div>';
   // 레이스 바
   var max=Math.max.apply(null, rows.map(function(r){return Math.max(r.goal,r.cur,r.prev);}).concat([1]));
   el('teamRace').innerHTML=rows.map(function(r){
     function bar(lbl,val,color){return '<div class="bar-row"><div class="bar-l">'+lbl+'</div><div class="bar-t"><div class="bar-f" data-w="'+(val/max*100)+'" style="background:'+color+';"></div></div><div class="bar-v">'+won(val)+'만</div></div>';}
-    return '<div class="race-team"><div class="rt-h"><span class="dot" style="background:'+r.t.color+'"></span>['+r.t.name+'] '+r.t.sm+' SM</div>'
+    return '<div class="race-team"><div class="rt-h"><span class="dot" style="background:'+r.t.color+'"></span>['+r.t.name+'] '+r.t.sm+' '+(r.t.smRole||'SM')+'</div>'
       +bar(isAll?'올해누적':'당월',r.cur,r.t.color)+bar('목표',r.goal,'#cbd5e1')+bar(isAll?'전년총':'전년',r.prev,'#94a3b8')+'</div>';
   }).join('');
   requestAnimationFrame(function(){el('teamRace').querySelectorAll('.bar-f').forEach(function(b){b.style.width=b.dataset.w+'%';});});
@@ -1110,8 +1154,14 @@ function renderWorkshop(){
   el('workshopCards').innerHTML = DATA.teams.map(function(t){
     return '<div class="work" style="border-bottom-color:'+t.color+';" onclick="enterTeam(\''+t.id+'\')">'
       +'<div class="w-n" style="background:'+t.color+'22;color:'+t.color+';">'+t.name.replace('팀','')+'</div>'
-      +'<div class="w-t">'+t.name+' 작업실</div><div class="w-s">'+t.sm+' SM 외 '+(t.head-1)+'명</div></div>';
+      +'<div class="w-t">'+t.name+' 작업실</div><div class="w-s">'+t.sm+' '+(t.smRole||'SM')+' 외 '+(t.head-1)+'명</div></div>';
   }).join('');
+}
+/* v36.0.42: 모바일 작업실 바로가기 — workshop 섹션으로 부드럽게 이동 */
+function jumpToWorkshop(){
+  var w=document.querySelector('main > section[data-sec="workshop"]');
+  if(w && w.scrollIntoView){ w.scrollIntoView({behavior:'smooth', block:'start'}); }
+  else { window.scrollTo({top:document.body.scrollHeight, behavior:'smooth'}); }
 }
 
 /* ====================== 팀별 DB 현황 (이식) ====================== */
@@ -1667,13 +1717,16 @@ updateTeamBtn();
       // (7월까지는 기존 멤버 대량 이관으로 데이터가 왜곡되므로 배지 보유자만 증감 집계 — 대장 지시)
       var DELTA_ALL_FROM = '2026-08';
       var deltaCountsAll = (ym >= DELTA_ALL_FROM);
-      var head={t1:0,t2:0,t3:0,t4:0}, delta={t1:0,t2:0,t3:0,t4:0}, smByTeam={}, recruits=[];
+      var head={t1:0,t2:0,t3:0,t4:0}, delta={t1:0,t2:0,t3:0,t4:0}, smByTeam={}, leaderByTeam={}, recruits=[];
       users.forEach(function(u){
         if(u.status !== 'approved') return;
         var tk = teamMap[u.team];
         if(!tk) return;
         head[tk]++;
         if(u.role === 'team_manager') smByTeam[tk] = u.name;
+        // v36.0.42: 팀 리더 = BM 우선(지점장), 없으면 SM. 이름+직급을 함께 저장 → 카드에 정확 표기
+        if(u.role === 'branch_manager'){ leaderByTeam[tk] = { name:u.name, role:'BM' }; }
+        else if(u.role === 'team_manager' && !leaderByTeam[tk]){ leaderByTeam[tk] = { name:u.name, role:'SM' }; }
         var joinedThisMonth = u.joined_at && String(u.joined_at).slice(0,7) === ym;
         // 팀별 인원 증감(전월대비): 8월(DELTA_ALL_FROM)부터 당월 가입자 전원 / 그 전(~7월)은 신입 배지 단 사람만 — 대장 지시
         if(joinedThisMonth && (deltaCountsAll || u.is_new === true)){ delta[tk]++; }
@@ -1686,10 +1739,13 @@ updateTeamBtn();
         window.DATA.recruits = recruits;
         window.DATA.teams.forEach(function(t){
           if(head[t.id] !== undefined){ t.head = head[t.id]; t.delta = delta[t.id]; }
-          if(smByTeam[t.id]) t.sm = smByTeam[t.id];
+          // v36.0.42: 리더 이름+직급 반영(BM/SM). 없으면 기존 SM 매핑 유지
+          if(leaderByTeam[t.id]){ t.sm = leaderByTeam[t.id].name; t.smRole = leaderByTeam[t.id].role; }
+          else if(smByTeam[t.id]){ t.sm = smByTeam[t.id]; t.smRole = 'SM'; }
         });
         if(typeof window.renderRecruit === 'function') window.renderRecruit();
         if(typeof window.renderWorkshop === 'function') window.renderWorkshop();
+        if(typeof window.renderRace === 'function') window.renderRace();   // v36.0.42: 리더 반영 후 레이스 카드 갱신(간헐 미표기 fix)
       }
       console.log('[2-4b] 인원 반영:', { head:head, delta:delta, 신규입사자:recruits.length });
     }catch(e){ console.warn('[2-4b] loadPeople 경고:', e && e.message); }
@@ -3078,7 +3134,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.40';
+  var VER='v36.0.42';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
