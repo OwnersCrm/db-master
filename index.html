@@ -361,7 +361,7 @@ section.sec{scroll-margin-top:150px;}
   .champ .c-amt .c-amt-sep{ display:none; }
   /* ④ 작업실 바로가기 플로팅 버튼 (모바일 전용, 반투명·비침습) */
   #jumpWorkBtn{
-    display:flex; align-items:center; justify-content:center;
+    display:flex !important; align-items:center; justify-content:center;
     position:fixed; right:14px; bottom:18px; z-index:80;
     width:44px; height:44px; border-radius:50%;
     background:rgba(15,23,42,.72); color:#fff; border:none;
@@ -390,7 +390,8 @@ section.sec{scroll-margin-top:150px;}
 .scroll5{max-height:232px;overflow-y:auto;padding-right:4px;}
 .scroll5::-webkit-scrollbar{width:6px;}
 .scroll5::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px;}
-.blist li .b-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;}
+.blist li .b-title{flex:0 1 auto;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;}
+.blist li .b-tw{flex:1;min-width:0;display:flex;align-items:center;overflow:hidden;}
 .blist li .b-date{font-size:11px;color:var(--muted);white-space:nowrap;flex:none;}
 .blist li .b-del{color:var(--danger);font-size:12px;opacity:.6;flex:none;}
 /* v36.0.42: 새 글 NEW 뱃지 — 제목 우측, 반짝임(7일 유효) */
@@ -805,7 +806,9 @@ function renderTicker(){
 function renderKPI(){
   var m=el('selMonth').value;
   var isAll=(m==='all');
-  var totalRev = DATA.teams.reduce(function(s,t){return s + (isAll? t.curM.reduce(function(a,b){return a+b;},0) : t.curM[t.curM.length-1]);},0)*10000;
+  // v36.0.43: 당월 매출은 선택월 인덱스로 접근(curM 12개월). 기존 curM[length-1]은 6개월 가정이라 7월↑에서 0 표기됨
+  var _kmi = isAll ? 0 : (parseInt(m,10)-1);
+  var totalRev = DATA.teams.reduce(function(s,t){return s + (isAll? t.curM.reduce(function(a,b){return a+b;},0) : (t.curM[_kmi]||0));},0)*10000;
   var note1 = isAll ? '청철/실효 0원 차감 총매출' : '팀 전체 합산';
   el('kpiCards').innerHTML =
     '<div class="kpi c1"><div class="k-ic">💰</div><span class="deco"></span><span class="deco2"></span>'
@@ -850,7 +853,7 @@ function boardRowHTML(k,p){
   var _isNew = _ts && (Date.now() - _ts) < 7*24*60*60*1000;
   var newBadge = _isNew ? '<span class="b-new">NEW</span>' : '';
   return '<li onclick="viewPost(\''+k+'\',\''+p.id+'\')">'+badge
-    +'<span class="b-title" style="font-weight:'+(p.type==='필독'?'800':'600')+';">'+p.title+'</span>'+newBadge
+    +'<span class="b-tw"><span class="b-title" style="font-weight:'+(p.type==='필독'?'800':'600')+';">'+p.title+'</span>'+newBadge+'</span>'
     +'<span class="b-date">'+p.date+'</span>'+del+'</li>';
 }
 function renderNotices(){
@@ -2145,6 +2148,7 @@ updateTeamBtn();
         if(c.isLapsed) return;
         var p=parseYM(c.date||d.date); if(p.y!==year || p.m<1 || p.m>12) return;
         var amt=safeNum(c.totalAmount||c.amount);
+        if(amt<=0) return;   // v36.0.43: 0원으로 입력된 계약은 매출·계약건수 집계 제외
         (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
         byTeam[tk][p.m-1]+=amt;
         ctTeam[tk][p.m-1]+=1;   /* 팀별 월별 계약건수 */
@@ -2208,8 +2212,9 @@ updateTeamBtn();
     DATA.teams.forEach(function(t){
       var tk=t.id;
       // 현재 렌더는 6개월(1~6월) 사용 → 12개월 배열 그대로 주입(렌더가 slice(0,6))
-      t.curM = cur[tk] ? cur[tk].slice(0,6) : [0,0,0,0,0,0];
-      t.prevM = prev[tk] ? prev[tk].slice(0,6) : [0,0,0,0,0,0];
+      // v36.0.43: 6개월 slice → 12개월(현재월 7월 이상도 반영). 렌더는 선택월 인덱스로 접근
+      t.curM = cur[tk] ? cur[tk].slice(0,12) : [0,0,0,0,0,0,0,0,0,0,0,0];
+      t.prevM = prev[tk] ? prev[tk].slice(0,12) : [0,0,0,0,0,0,0,0,0,0,0,0];
       // 월목표: 현재월(또는 1~6월 평균적 목표) — 렌더는 t.goal(월목표) 사용. 데이터 없으면 0
       var gm=0; for(var mm=1;mm<=6;mm++){ gm=Math.max(gm, teamGoal(tk,year,mm)); }
       // 월별 목표가 있으면 현재 선택월 기준, 없으면 0 (보완B에서 "미설정" 표시)
@@ -2274,6 +2279,7 @@ updateTeamBtn();
         if(c.isLapsed) return;
         if(!ymMatch(c.date||d.date, year, month, isAll)) return;
         var amt=safeNum(c.totalAmount||c.amount);
+        if(amt<=0) return;   // v36.0.43: 0원 계약 제외(개인 매출·건수)
         (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
         rev[mem]=(rev[mem]||0)+amt; ct[mem]=(ct[mem]||0)+1;
       });
@@ -3134,7 +3140,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.42';
+  var VER='v36.0.43';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
