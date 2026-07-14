@@ -2291,25 +2291,17 @@ updateTeamBtn();
 
   /* 시즌별 멤버 매출 합산(만원). months=[7,8] or [1,2] */
   function computeSeasonRev(recs, year, months){
-    // v36.0.44: 쉐어 반영(computeShare와 동일) — 원주인=순수실적(전액-쉐어), 쉐어받은 실제멤버=가상 크레딧.
-    //           기존엔 외부쉐어만 빼고 전액을 원주인에게 줘서, 쉐어받은 팀장이 누락되고 원주인이 과다집계됐음.
     var rev={}, team={};
     (recs||[]).forEach(function(d){
-      if(!d || d.is_frozen) return;
+      if(d.is_frozen) return;
       if(normStatus(d.status)!=='계약') return;
-      var owner=d.member; if(!owner) return;
-      var tk=teamKey(d.team); team[owner]=tk;
+      var mem=d.member; if(!mem) return; team[mem]=teamKey(d.team);
       getDBContracts(d).forEach(function(c){
-        if(!c || c.isLapsed) return;
-        var pm=parseYM(c.date||d.date); if(pm.y!==year || months.indexOf(pm.m)<0) return;
-        var total=safeNum(c.totalAmount||c.amount); if(total<=0) return;   // 0원 계약 제외
-        var ded=0;
-        (c.shareList||[]).forEach(function(s){
-          var amt=safeNum(s&&s.amount); if(amt<=0) return; var p=s&&s.partner;
-          if(isExternal(p)||isRealShareMember(p)) ded+=amt;              /* 외부+실제멤버 쉐어는 원주인서 차감 */
-          if(isRealShareMember(p)){ rev[p]=(rev[p]||0)+amt; team[p]=team[p]||tk; }  /* 쉐어받은 멤버 크레딧 */
-        });
-        rev[owner]=(rev[owner]||0)+Math.max(0,total-ded);               /* 원주인 순수실적 */
+        if(c.isLapsed) return;
+        var p=parseYM(c.date||d.date); if(p.y!==year || months.indexOf(p.m)<0) return;
+        var amt=safeNum(c.totalAmount||c.amount);
+        (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
+        rev[mem]=(rev[mem]||0)+amt;
       });
     });
     /* 만원 단위, 무실적(0) 제외, sum 내림차순 */
@@ -3148,7 +3140,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.44';
+  var VER='v36.0.43';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
