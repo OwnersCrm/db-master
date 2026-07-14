@@ -733,8 +733,11 @@ var DB_MATRIX={
     if(DATA.teams) DATA.teams.forEach(function(t){ t.curM=[0,0,0,0,0,0]; t.prevM=[0,0,0,0,0,0]; t.goal=0; t.head=0; t.delta=0; });
     DATA.contracts=0; DATA.riskCancel=0; DATA.riskVoid=0;
     if(DATA.inflow) DATA.inflow.forEach(function(s){ s.assigned=0; s.mt=0; s.ct=0; s.rev=0; });
-    /* ranking/recruits/promoArchive는 원본 샘플 유지 — injectRanking/injectPromo가 실데이터로 교체함.
-       (비우면 원본 renderRace가 topPerson=undefined로 크래시 → 팀선택 버튼 사라짐) */
+    /* v36.0.45: 데모(프로토타입 샘플) 전면 제거 — 원본 정의는 보존, 내용만 비움.
+       실데이터는 injectRanking/injectPromo/loadPeople/게시판이 채움. 미주입 시 데모 대신 빈 상태(정직).
+       renderRace는 topPerson 가드로 크래시 방지 완료(v36.0.45). */
+    DATA.notices = []; DATA.free = []; DATA.ranking = []; DATA.recruits = [];
+    if(DATA.promoArchive){ Object.keys(DATA.promoArchive).forEach(function(y){ DATA.promoArchive[y] = {summer:[], winter:[]}; }); }
   }
   if(typeof DB_MATRIX!=='undefined' && DB_MATRIX){ Object.keys(DB_MATRIX).forEach(function(src){ Object.keys(DB_MATRIX[src]).forEach(function(tk){ DB_MATRIX[src][tk]={assigned:0,mt:0,ct:0,rev:0}; }); }); }
   console.log('[B] 프로토타입 샘플 0 처리 - 실데이터만 표시(미연동 위젯은 0)');
@@ -989,6 +992,7 @@ function renderRace(){
   var topTeam=rows.slice().sort(function(a,b){return b.cur-a.cur;})[0];
   var topTeamCt=DATA.ranking.reduce(function(s,r){return s+(r.team===topTeam.t.id?r.ct:0);},0);
   var topPerson=DATA.ranking.slice().filter(function(r){return r.rev>0;}).sort(function(a,b){return b.rev-a.rev;})[0];
+  if(!topPerson){ topPerson={name:'-', team:(topTeam&&topTeam.t?topTeam.t.id:'t1'), rev:0, ct:0, role:'member'}; }  // v36.0.45: 랭킹 비었을 때 크래시 방지(데모 제거 안전화)
   var pT=teamById(topPerson.team);
   var roleKor={member:'팀장',team_manager:'SM',SM:'SM',branch_manager:'BM',BM:'BM',system_admin:'관리자'};
   var pRole=roleKor[topPerson.role]||'팀장';
@@ -2291,17 +2295,25 @@ updateTeamBtn();
 
   /* 시즌별 멤버 매출 합산(만원). months=[7,8] or [1,2] */
   function computeSeasonRev(recs, year, months){
+    // v36.0.45: 쉐어 반영. isRealShareMember는 다른 스코프라 참조 불가 → 인라인(_rsm)로 대체(isExternal은 스코프 내).
+    function _rsm(p){ p=String(p||'').trim(); return !!p && p!=='선택' && p!=='회사' && p!=='SM' && p!=='시스템관리자' && !isExternal(p); }
     var rev={}, team={};
     (recs||[]).forEach(function(d){
-      if(d.is_frozen) return;
+      if(!d || d.is_frozen) return;
       if(normStatus(d.status)!=='계약') return;
-      var mem=d.member; if(!mem) return; team[mem]=teamKey(d.team);
+      var owner=d.member; if(!owner) return;
+      var tk=teamKey(d.team); team[owner]=tk;
       getDBContracts(d).forEach(function(c){
-        if(c.isLapsed) return;
-        var p=parseYM(c.date||d.date); if(p.y!==year || months.indexOf(p.m)<0) return;
-        var amt=safeNum(c.totalAmount||c.amount);
-        (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
-        rev[mem]=(rev[mem]||0)+amt;
+        if(!c || c.isLapsed) return;
+        var pm=parseYM(c.date||d.date); if(pm.y!==year || months.indexOf(pm.m)<0) return;
+        var total=safeNum(c.totalAmount||c.amount); if(total<=0) return;   // 0원 계약 제외
+        var ded=0;
+        (c.shareList||[]).forEach(function(s){
+          var amt=safeNum(s&&s.amount); if(amt<=0) return; var p=s&&s.partner;
+          if(isExternal(p)||_rsm(p)) ded+=amt;                            /* 외부+실제멤버 쉐어는 원주인서 차감 */
+          if(_rsm(p)){ rev[p]=(rev[p]||0)+amt; team[p]=team[p]||tk; }      /* 쉐어받은 멤버 크레딧 */
+        });
+        rev[owner]=(rev[owner]||0)+Math.max(0,total-ded);                 /* 원주인 순수실적 */
       });
     });
     /* 만원 단위, 무실적(0) 제외, sum 내림차순 */
@@ -3140,7 +3152,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.43';
+  var VER='v36.0.45';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
