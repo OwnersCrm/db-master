@@ -411,6 +411,8 @@ section.sec{scroll-margin-top:150px;}
 .attach-item{display:flex;align-items:center;gap:8px;font-size:12px;background:var(--surface-2);border:1px solid var(--line);border-radius:7px;padding:6px 10px;}
 .attach-item img{height:34px;border-radius:4px;}
 .attach-item .rm{margin-left:auto;color:var(--danger);cursor:pointer;}
+.attach-item .att-dl{margin-left:auto;color:var(--accent,#2563eb);cursor:pointer;text-decoration:none;font-size:14px;padding:2px 6px;border-radius:5px;}
+.attach-item .att-dl:hover{background:var(--surface-3,rgba(0,0,0,.05));}
 .emoji-pick{display:flex;flex-wrap:wrap;gap:2px;max-width:240px;background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px;position:absolute;z-index:5;box-shadow:var(--shadow2);}
 .emoji-pick button{width:30px;height:30px;font-size:16px;border:none;background:transparent;}
 /* 우승 배너 */
@@ -869,13 +871,28 @@ function renderFree(){
   el('freeList').innerHTML=DATA.free.map(function(p){return boardRowHTML('free',p);}).join('') || '<li style="color:var(--muted);justify-content:center;">게시글이 없습니다.</li>';
 }
 function toggleNoticeFilter(){ noticeFilter = noticeFilter==='필독'?'전체':'필독'; el('filtPin').textContent = noticeFilter==='필독'?'전체보기':'필독만'; renderNotices(); }
+/* v36.0.46: 공지 작성자 표시 라벨 — 이름+직급 (김지훈 SM / 조기열 BM / DB관리자 / 시스템관리자) */
+function boardAuthorLabel(p){
+  var nm=((p&&p.authorName)||'').trim(), r=(p&&p.author)||'';
+  if(r==='system_admin') return (nm && nm!=='관리자') ? nm+' · 시스템관리자' : '시스템관리자';
+  if(r==='db_manager')   return (nm && nm!=='DB관리자') ? nm+' · DB관리자'   : 'DB관리자';
+  var lbl=({BM:'BM',branch_manager:'BM',SM:'SM',team_manager:'SM',member:'팀원'})[r]||r;
+  return nm ? (nm+' '+lbl).trim() : (lbl||'관리자');
+}
 function viewPost(k,id){
   var p=boardData(k).find(function(x){return x.id===id;}); if(!p)return;
+  // v36.0.46: 조회수 +1 (로컬 즉시 반영 + DB 반영 훅). 중복 방지 없이 단순 카운트.
+  p.views=(p.views||0)+1;
+  try{ if(typeof window.bumpBoardView==='function') window.bumpBoardView(id, p.views); }catch(e){}
   var att=(p.attach&&p.attach.length)? '<div style="margin-top:14px;"><b style="font-size:12px;color:var(--ink2);">첨부파일</b>'+p.attach.map(function(a){
-    return '<div class="attach-item" style="margin-top:6px;">'+(a.img?'<img src="'+a.img+'">':'<i class="fa-solid fa-paperclip"></i>')+'<span>'+a.name+'</span></div>';}).join('')+'</div>' : '';
+    var src=a.url||a.img||a.data||'';
+    var isImg=(a.mime&&a.mime.indexOf('image')===0)||!!a.img||/^data:image/.test(src);
+    var dl=src?'<a href="'+src+'" download="'+(a.name||'file')+'" target="_blank" rel="noopener" class="att-dl" title="다운로드" onclick="event.stopPropagation()"><i class="fa-solid fa-download"></i></a>':'';
+    return '<div class="attach-item" style="margin-top:6px;">'+((isImg&&src)?'<img src="'+src+'">':'<i class="fa-solid fa-file"></i>')+'<span>'+(a.name||'')+'</span>'+dl+'</div>';}).join('')+'</div>' : '';
   var del = canDeleteBoard()? '<button class="btn ghost" style="flex:1;" onclick="deletePost(\''+k+'\',\''+id+'\')"><i class="fa-solid fa-trash"></i> 삭제</button>':'';
+  var meta = (k==='notice'? boardAuthorLabel(p) : '익명')+' · '+p.date;
   modal('<h3><i class="fa-solid fa-'+(k==='notice'?'bullhorn':'comment-dots')+'"></i> '+(k==='notice'&&p.type==='필독'?'<span class="bp">필독</span> ':'')+p.title+'</h3>'
-    +'<div style="font-size:11px;color:var(--muted);margin-bottom:10px;">'+(k==='notice'?(p.author||'관리자')+' · ':'익명 · ')+p.date+'</div>'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--muted);margin-bottom:10px;gap:8px;"><span>'+meta+'</span><span style="white-space:nowrap;"><i class="fa-regular fa-eye"></i> 조회 '+(p.views||0)+'</span></div>'
     +'<div style="background:var(--surface-2);border:1px solid var(--line);border-radius:10px;padding:16px;font-size:13.5px;line-height:1.7;min-height:80px;">'+p.body+'</div>'+att
     +'<div style="display:flex;gap:8px;margin-top:16px;">'+del+'<button class="btn" style="flex:2;" onclick="closeModal()">닫기</button></div>');
 }
@@ -894,7 +911,7 @@ function confirmDelete(k,id){
 }
 function permPopup(){
   modal('<div style="text-align:center;"><div style="font-size:38px;">🔒</div><h3 style="justify-content:center;">작성 권한 없음</h3>'
-    +'<p style="color:var(--ink2);">지점 주요 공지는 <b>시스템관리자·BM·SM</b>만 작성할 수 있습니다.<br>건의는 익명 자유게시판을 이용해 주세요.</p>'
+    +'<p style="color:var(--ink2);">지점 주요 공지는 <b>시스템관리자·BM·SM·DB관리자</b>만 작성할 수 있습니다.<br>건의는 익명 자유게시판을 이용해 주세요.</p>'
     +'<button class="btn" style="width:100%;margin-top:10px;" onclick="closeModal()">확인</button></div>');
 }
 var _editAttach=[];
@@ -902,7 +919,7 @@ function writePost(k){
   if(!canWriteBoard(k)){ permPopup(); return; }
   _editAttach=[];
   var typeSel = k==='notice' ? '<div class="field"><label>구분</label><select class="inp" id="postType"><option value="일반">일반</option><option value="필독">필독 (상단 고정)</option></select></div>' : '';
-  var attachUI = k==='notice' ? '<div class="field"><label>첨부파일 <span style="color:var(--muted);font-weight:400;">(이미지·엑셀·워드·PPT — 연동 시 실제 저장)</span></label>'
+  var attachUI = k==='notice' ? '<div class="field"><label>첨부파일 <span style="color:var(--muted);font-weight:400;">(이미지·엑셀·워드·PPT)</span></label>'
       +'<input type="file" id="postFiles" multiple onchange="onPickFiles()" style="font-size:12px;"><div class="attach-list" id="attachList"></div></div>' : '';
   var palette=['#1e293b','#ef4444','#d97706','#10b981','#3b82f6','#8b5cf6'].map(function(c){return '<button type="button" class="sw" style="background:'+c+'" onclick="fmt(\'foreColor\',\''+c+'\')"></button>';}).join('');
   modal('<h3><i class="fa-solid fa-pen"></i> '+(k==='notice'?'공지 작성':'익명 글쓰기')+(k==='free'?' <span style="font-size:11px;color:var(--muted);font-weight:600;">작성자 익명 처리</span>':'')+'</h3>'
@@ -936,11 +953,14 @@ function toggleEmoji(ev){
 function onPickFiles(){
   var files=el('postFiles').files;
   Array.prototype.forEach.call(files,function(f){
-    var item={name:f.name,img:null};
-    if(f.type.indexOf('image')===0){ var r=new FileReader(); r.onload=function(){item.img=r.result; renderAttach();}; r.readAsDataURL(f); }
-    _editAttach.push(item);
+    var r=new FileReader();
+    r.onload=function(){
+      // v36.0.46: 모든 파일을 data(base64)+mime로 저장 → Storage 업로드 블록과 정합, 비이미지도 내용 보존
+      _editAttach.push({ name:f.name, mime:f.type||'', data:r.result, img:(f.type.indexOf('image')===0?r.result:null) });
+      renderAttach();
+    };
+    r.readAsDataURL(f);
   });
-  renderAttach();
 }
 function renderAttach(){
   var host=el('attachList'); if(!host)return;
@@ -954,7 +974,7 @@ function savePost(k){
   var body=el('postBody').innerHTML||'';
   var today=new Date(); var dt=('0'+(today.getMonth()+1)).slice(-2)+'-'+('0'+today.getDate()).slice(-2);
   var post={id:'p'+Date.now(),title:title,body:body,date:dt,ts:Date.now()};
-  if(k==='notice'){ post.type=el('postType').value; post.author=DATA.role; post.attach=_editAttach.slice(); DATA.notices.unshift(post); noticeFilter='전체'; if(el('filtPin'))el('filtPin').textContent='필독만'; renderNotices(); }
+  if(k==='notice'){ post.type=el('postType').value; post.author=DATA.role; post.authorName=(typeof currentUserName==='function'?(currentUserName()||''):''); post.attach=_editAttach.slice(); DATA.notices.unshift(post); noticeFilter='전체'; if(el('filtPin'))el('filtPin').textContent='필독만'; renderNotices(); }
   else { DATA.free.unshift(post); renderFree(); }
   closeModal();
 }
@@ -2968,14 +2988,14 @@ updateTeamBtn();
 <script>
 (function(){
   function sbc(){ return window.sbClient; }
-  var WRITE_ROLES=['system_admin','BM','SM'];   /* 공지 글쓰기 권한 */
+  var WRITE_ROLES=['system_admin','BM','SM','db_manager'];   /* 공지 글쓰기 권한 (v36.0.46: DB관리자 추가) */
   var _loaded=false;
 
   function ymd2(ts){ try{ var d=new Date(ts); if(isNaN(d.getTime()))return '';
     return ('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }catch(e){ return ''; } }
 
   function rowToPost(r){
-    var p={ id:r.id, title:r.title||'', body:r.body||'', date:ymd2(r.created_at), attach:(r.attach||[]), authorName:r.author_name||'' };
+    var p={ id:r.id, title:r.title||'', body:r.body||'', date:ymd2(r.created_at), attach:(r.attach||[]), authorName:r.author_name||'', views:(r.views||0) };
     if(r.kind==='notice'){ p.type=r.type||'일반'; p.author=r.author_role||''; }
     return p;
   }
@@ -3012,6 +3032,15 @@ updateTeamBtn();
     }catch(e){ console.warn('[게시판] 저장 예외:', e&&e.message); }
   }
 
+  /* v36.0.46: 조회수 +1 DB 반영 (board_posts.views). views 컬럼 미존재 시 조용히 무시(로컬만 표시). */
+  window.bumpBoardView=function(id, views){
+    try{ var sb=sbc(); if(!sb || !id) return;
+      sb.from('board_posts').update({ views: views }).eq('id', id).then(function(res){
+        if(res && res.error) console.warn('[게시판] 조회수 반영 경고:', res.error.message);
+      });
+    }catch(e){ console.warn('[게시판] 조회수 예외:', e&&e.message); }
+  };
+
   /* WRITE: savePost 체인 래핑 — 공지 권한 게이트 + 저장 후 DB insert */
   if(typeof window.savePost==='function'){
     var _save=window.savePost;
@@ -3019,7 +3048,7 @@ updateTeamBtn();
       if(k==='notice' && WRITE_ROLES.indexOf(DATA.role)<0){
         if(typeof modal==='function') modal('<div style="text-align:center;"><div style="font-size:36px;">🔒</div>'
           +'<h3 style="justify-content:center;">작성 권한 없음</h3>'
-          +'<p style="color:var(--ink2);">지점 주요 공지는 <b>관리자·BM·SM</b>만 작성할 수 있습니다.</p>'
+          +'<p style="color:var(--ink2);">지점 주요 공지는 <b>관리자·BM·SM·DB관리자</b>만 작성할 수 있습니다.</p>'
           +'<button class="btn ghost" style="width:100%;margin-top:10px;" onclick="closeModal()">닫기</button></div>');
         return;
       }
@@ -3152,7 +3181,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.45';
+  var VER='v36.0.46';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
