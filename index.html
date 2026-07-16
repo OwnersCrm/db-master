@@ -914,10 +914,10 @@ function permPopup(){
     +'<p style="color:var(--ink2);">지점 주요 공지는 <b>시스템관리자·BM·SM·DB관리자</b>만 작성할 수 있습니다.<br>건의는 익명 자유게시판을 이용해 주세요.</p>'
     +'<button class="btn" style="width:100%;margin-top:10px;" onclick="closeModal()">확인</button></div>');
 }
-var _editAttach=[];
+window._editAttach=window._editAttach||[];   /* v36.0.49: 지역/window 첨부배열 통일 — 업로드·저장과 정합(첨부 유실 fix) */
 function writePost(k){
   if(!canWriteBoard(k)){ permPopup(); return; }
-  _editAttach=[];
+  window._editAttach=[];
   var typeSel = k==='notice' ? '<div class="field"><label>구분</label><select class="inp" id="postType"><option value="일반">일반</option><option value="필독">필독 (상단 고정)</option></select></div>' : '';
   var attachUI = k==='notice' ? '<div class="field"><label>첨부파일 <span style="color:var(--muted);font-weight:400;">(이미지·엑셀·워드·PPT)</span></label>'
       +'<input type="file" id="postFiles" multiple onchange="onPickFiles()" style="font-size:12px;"><div class="attach-list" id="attachList"></div></div>' : '';
@@ -956,7 +956,7 @@ function onPickFiles(){
     var r=new FileReader();
     r.onload=function(){
       // v36.0.46: 모든 파일을 data(base64)+mime로 저장 → Storage 업로드 블록과 정합, 비이미지도 내용 보존
-      _editAttach.push({ name:f.name, mime:f.type||'', data:r.result, img:(f.type.indexOf('image')===0?r.result:null) });
+      window._editAttach.push({ name:f.name, mime:f.type||'', data:r.result, img:(f.type.indexOf('image')===0?r.result:null) });
       renderAttach();
     };
     r.readAsDataURL(f);
@@ -964,17 +964,17 @@ function onPickFiles(){
 }
 function renderAttach(){
   var host=el('attachList'); if(!host)return;
-  host.innerHTML=_editAttach.map(function(a,i){
+  host.innerHTML=window._editAttach.map(function(a,i){
     return '<div class="attach-item">'+(a.img?'<img src="'+a.img+'">':'<i class="fa-solid fa-file"></i>')+'<span>'+a.name+'</span><span class="rm" onclick="rmAttach('+i+')">✕</span></div>';
   }).join('');
 }
-function rmAttach(i){ _editAttach.splice(i,1); renderAttach(); }
+function rmAttach(i){ window._editAttach.splice(i,1); renderAttach(); }
 function savePost(k){
   var title=(el('postTitle').value||'').trim(); if(!title){ el('postTitle').focus(); return; }
   var body=el('postBody').innerHTML||'';
   var today=new Date(); var dt=('0'+(today.getMonth()+1)).slice(-2)+'-'+('0'+today.getDate()).slice(-2);
   var post={id:'p'+Date.now(),title:title,body:body,date:dt,ts:Date.now()};
-  if(k==='notice'){ post.type=el('postType').value; post.author=DATA.role; post.authorName=(typeof currentUserName==='function'?(currentUserName()||''):''); post.attach=_editAttach.slice(); DATA.notices.unshift(post); noticeFilter='전체'; if(el('filtPin'))el('filtPin').textContent='필독만'; renderNotices(); }
+  if(k==='notice'){ post.type=el('postType').value; post.author=DATA.role; post.authorName=(typeof currentUserName==='function'?(currentUserName()||''):''); post.attach=window._editAttach.slice(); DATA.notices.unshift(post); noticeFilter='전체'; if(el('filtPin'))el('filtPin').textContent='필독만'; renderNotices(); }
   else { DATA.free.unshift(post); renderFree(); }
   closeModal();
 }
@@ -3190,7 +3190,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.48';
+  var VER='v36.0.49';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
