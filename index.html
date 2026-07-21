@@ -1532,9 +1532,9 @@ async function changeMyPassword(){
 }
 
 /* ====================== 모달 공통 ====================== */
-function modal(html){ var b=el('modalBox'); b.classList.remove('wide'); b.classList.remove('xwide'); b.innerHTML=html; el('modalMask').classList.add('show'); }
+function modal(html){ window.__modalLock=false; var b=el('modalBox'); b.classList.remove('wide'); b.classList.remove('xwide'); b.innerHTML=html; el('modalMask').classList.add('show'); }
 function closeModal(){ el('modalMask').classList.remove('show'); }
-el('modalMask').addEventListener('click',function(e){if(e.target===el('modalMask'))closeModal();});
+el('modalMask').addEventListener('click',function(e){if(e.target===el('modalMask') && !window.__modalLock)closeModal();});
 
 /* ====================== 초기화 ====================== */
 function renderAll(){
@@ -2565,6 +2565,7 @@ updateTeamBtn();
           +'<div class="editor-body" id="postBody" contenteditable="true"></div></div>'
         +attachUI
         +'<div style="display:flex;gap:8px;margin-top:6px;"><button class="btn ghost" style="flex:1;" onclick="closeModal()">취소</button><button class="btn gold" style="flex:2;" onclick="savePost(\''+k+'\')">등록</button></div>');
+      window.__modalLock=true;   /* v36.0.50: 글쓰기·수정 모달은 배경 클릭으로 닫히지 않음 — 등록/취소 버튼만 */
       setTimeout(function(){var t=document.getElementById('postTitle');if(t)t.focus();},50);
     };
 
@@ -3190,7 +3191,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.49';
+  var VER='v36.0.50';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
