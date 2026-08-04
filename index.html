@@ -3190,7 +3190,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.50';
+  var VER='v36.0.51';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3965,8 +3965,11 @@ main .card:hover{
     var arr=window.__boardComments[postId]||[];
     box.innerHTML = arr.length ? arr.map(function(c){
       var when=''; try{ var d=new Date(c.created_at); when=('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }catch(e){}
-      var delBtn = (typeof canDeleteBoard==='function' && canDeleteBoard())
-        ? '<span class="cmt-del" title="삭제" onclick="delComment('+c.id+',\''+String(postId)+'\')" style="cursor:pointer;color:var(--muted);margin-left:8px;"><i class="fa-solid fa-xmark"></i></span>' : '';
+      /* B안: 본인(브라우저 기억) 또는 시스템관리자만 삭제 버튼 표시 */
+      var _mine = (typeof window.__isMyComment==='function') && window.__isMyComment(c.id);
+      var _admin = false; try{ _admin = (DATA.role==='system_admin'); }catch(e){}
+      var delBtn = (_mine || _admin)
+        ? '<span class="cmt-del" title="'+(_mine?'내 댓글 삭제':'관리자 삭제')+'" onclick="delComment('+c.id+',\''+String(postId)+'\')" style="cursor:pointer;color:var(--muted);margin-left:8px;"><i class="fa-solid fa-xmark"></i></span>' : '';
       return '<div class="cmt-item" style="padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;">'
         +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
         +'<b style="color:var(--ink2);font-size:11px;">익명</b>'
@@ -3974,21 +3977,42 @@ main .card:hover{
         +'<div style="margin-top:3px;line-height:1.6;white-space:pre-wrap;word-break:break-word;">'+esc(c.body)+'</div></div>';
     }).join('') : '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">첫 댓글을 남겨보세요.</div>';
   }
+  /* B안: 내가 쓴 댓글 ID를 브라우저에 기억 (완전 익명 유지 + 본인 삭제용) */
+  var MY_CMT_KEY='__myBoardComments';
+  function getMyCmtIds(){
+    try{ return JSON.parse(localStorage.getItem(MY_CMT_KEY)||'[]'); }catch(e){ return []; }
+  }
+  function addMyCmtId(id){
+    try{ var a=getMyCmtIds(); if(a.indexOf(id)<0){ a.push(id); localStorage.setItem(MY_CMT_KEY, JSON.stringify(a)); } }catch(e){}
+  }
+  function removeMyCmtId(id){
+    try{ var a=getMyCmtIds().filter(function(x){ return x!==id; }); localStorage.setItem(MY_CMT_KEY, JSON.stringify(a)); }catch(e){}
+  }
+  function isMyComment(id){ return getMyCmtIds().indexOf(id)>=0; }
+  window.__isMyComment=isMyComment;
+
   window.addComment = function(postId){
     var sb=sbc(); if(!sb) return;
     var ta=document.getElementById('cmtInput'); if(!ta) return;
     var body=(ta.value||'').trim(); if(!body){ ta.focus(); return; }
     if(body.length>1000){ alert('댓글은 1000자 이내로 작성해 주세요.'); return; }
-    try{ sb.from('board_comments').insert({ post_id:String(postId), body:body }).then(function(res){
-      if(res.error){ console.warn('[댓글] 저장 경고:', res.error.message); alert('댓글 저장에 실패했습니다.'); return; }
+    try{ sb.from('board_comments').insert({ post_id:String(postId), body:body }).select().then(function(res){
+      if(res.error){ console.warn('[댓글] 저장 경고:', res.error.message); alert('댓글 저장에 실패했습니다.\n(관리자에게 문의: '+res.error.message+')'); return; }
+      /* 방금 저장된 댓글 ID를 내 것으로 기억 (본인 삭제용) */
+      try{ var row=(res.data&&res.data[0]); if(row&&row.id!=null) addMyCmtId(row.id); }catch(e){}
       ta.value=''; window.loadComments(postId);
-    }); }catch(e){ console.warn('[댓글] 저장 예외:', e&&e.message); }
+    }); }catch(e){ console.warn('[댓글] 저장 예외:', e&&e.message); alert('댓글 저장 중 오류가 발생했습니다.'); }
   };
   window.delComment = function(cid, postId){
     var sb=sbc(); if(!sb) return;
-    if(typeof canDeleteBoard==='function' && !canDeleteBoard()){ if(typeof permPopup==='function')permPopup(); return; }
+    /* B안: 본인(브라우저 기억) 또는 시스템관리자만 삭제 가능 */
+    var _mine = (typeof window.__isMyComment==='function') && window.__isMyComment(cid);
+    var _admin = false; try{ _admin = (DATA.role==='system_admin'); }catch(e){}
+    if(!_mine && !_admin){ if(typeof permPopup==='function')permPopup(); return; }
+    if(!confirm('이 댓글을 삭제할까요?')) return;
     try{ sb.from('board_comments').delete().eq('id',cid).then(function(res){
-      if(res.error){ console.warn('[댓글] 삭제 경고:', res.error.message); return; }
+      if(res.error){ console.warn('[댓글] 삭제 경고:', res.error.message); alert('댓글 삭제에 실패했습니다.'); return; }
+      try{ if(typeof removeMyCmtId==='function') removeMyCmtId(cid); }catch(e){}
       window.loadComments(postId);
     }); }catch(e){ console.warn('[댓글] 삭제 예외:', e&&e.message); }
   };
