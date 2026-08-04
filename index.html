@@ -1532,9 +1532,9 @@ async function changeMyPassword(){
 }
 
 /* ====================== 모달 공통 ====================== */
-function modal(html){ window.__modalLock=false; var b=el('modalBox'); b.classList.remove('wide'); b.classList.remove('xwide'); b.innerHTML=html; el('modalMask').classList.add('show'); }
+function modal(html){ var b=el('modalBox'); b.classList.remove('wide'); b.classList.remove('xwide'); b.innerHTML=html; el('modalMask').classList.add('show'); }
 function closeModal(){ el('modalMask').classList.remove('show'); }
-el('modalMask').addEventListener('click',function(e){if(e.target===el('modalMask') && !window.__modalLock)closeModal();});
+el('modalMask').addEventListener('click',function(e){if(e.target===el('modalMask'))closeModal();});
 
 /* ====================== 초기화 ====================== */
 function renderAll(){
@@ -2565,7 +2565,6 @@ updateTeamBtn();
           +'<div class="editor-body" id="postBody" contenteditable="true"></div></div>'
         +attachUI
         +'<div style="display:flex;gap:8px;margin-top:6px;"><button class="btn ghost" style="flex:1;" onclick="closeModal()">취소</button><button class="btn gold" style="flex:2;" onclick="savePost(\''+k+'\')">등록</button></div>');
-      window.__modalLock=true;   /* v36.0.50: 글쓰기·수정 모달은 배경 클릭으로 닫히지 않음 — 등록/취소 버튼만 */
       setTimeout(function(){var t=document.getElementById('postTitle');if(t)t.focus();},50);
     };
 
@@ -3917,6 +3916,257 @@ main .card:hover{
   function initYears(){ fillYearSelect('selYear'); fillYearSelect('promoYear'); }
   if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', initYears);
   else initYears();
+})();
+</script>
+<!-- ===== [v36.0.50] 게시판 확장: ①공지 조회자 이름 ②익명 댓글 ③기간별 일괄삭제 (additive, 원본 0 삭제) ===== -->
+<script>
+(function(){
+  function sbc(){ return window.sbClient; }
+  function myName(){ return (typeof currentUserName==='function' ? (currentUserName()||'') : ''); }
+  function esc(s){ return String(s==null?'':s).replace(/[&<>"']/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c];}); }
+
+  /* ────────── ① 공지 조회자 기록/표시 ────────── */
+  window.__boardViewers = window.__boardViewers || {};   /* post_id → [이름] 캐시 */
+
+  function recordView(postId){
+    var sb=sbc(), nm=myName(); if(!sb || !nm || !postId) return;
+    try{ sb.rpc('record_board_view', { p_id:String(postId), p_viewer:nm }).then(function(res){
+      if(res && res.error) console.warn('[조회자] 기록 경고:', res.error.message);
+      loadViewers(postId);   /* 방금 본 나까지 포함해 갱신 */
+    }); }catch(e){ console.warn('[조회자] 기록 예외:', e&&e.message); }
+  }
+  function loadViewers(postId){
+    var sb=sbc(); if(!sb || !postId) return;
+    try{ sb.rpc('get_board_viewers', { p_id:String(postId) }).then(function(res){
+      if(res && res.error){ console.warn('[조회자] 조회 경고:', res.error.message); return; }
+      var names=(res.data||[]).map(function(r){ return r.viewer_name; });
+      window.__boardViewers[postId]=names;
+      var tip=document.getElementById('viewerTip');
+      if(tip && tip.getAttribute('data-pid')===String(postId)){
+        tip.setAttribute('title', names.length? ('읽음('+names.length+'): '+names.join(', ')) : '아직 읽은 사람 없음');
+      }
+    }); }catch(e){ console.warn('[조회자] 조회 예외:', e&&e.message); }
+  }
+
+  /* ────────── ② 익명 댓글 ────────── */
+  window.__boardComments = window.__boardComments || {};
+
+  window.loadComments = function(postId){
+    var sb=sbc(); if(!sb || !postId) return;
+    try{ sb.from('board_comments').select('*').eq('post_id',String(postId)).order('created_at',{ascending:true}).then(function(res){
+      if(res.error){ console.warn('[댓글] 조회 경고:', res.error.message); return; }
+      window.__boardComments[postId]=res.data||[];
+      renderComments(postId);
+      var cc=document.getElementById('cmtCount'); if(cc) cc.textContent='('+(res.data||[]).length+')';
+    }); }catch(e){ console.warn('[댓글] 조회 예외:', e&&e.message); }
+  };
+  function renderComments(postId){
+    var box=document.getElementById('cmtList'); if(!box) return;
+    var arr=window.__boardComments[postId]||[];
+    box.innerHTML = arr.length ? arr.map(function(c){
+      var when=''; try{ var d=new Date(c.created_at); when=('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2)+' '+('0'+d.getHours()).slice(-2)+':'+('0'+d.getMinutes()).slice(-2); }catch(e){}
+      var delBtn = (typeof canDeleteBoard==='function' && canDeleteBoard())
+        ? '<span class="cmt-del" title="삭제" onclick="delComment('+c.id+',\''+String(postId)+'\')" style="cursor:pointer;color:var(--muted);margin-left:8px;"><i class="fa-solid fa-xmark"></i></span>' : '';
+      return '<div class="cmt-item" style="padding:8px 10px;border-bottom:1px solid var(--line);font-size:12.5px;">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;gap:8px;">'
+        +'<b style="color:var(--ink2);font-size:11px;">익명</b>'
+        +'<span style="color:var(--muted);font-size:10px;white-space:nowrap;">'+when+delBtn+'</span></div>'
+        +'<div style="margin-top:3px;line-height:1.6;white-space:pre-wrap;word-break:break-word;">'+esc(c.body)+'</div></div>';
+    }).join('') : '<div style="padding:14px;text-align:center;color:var(--muted);font-size:12px;">첫 댓글을 남겨보세요.</div>';
+  }
+  window.addComment = function(postId){
+    var sb=sbc(); if(!sb) return;
+    var ta=document.getElementById('cmtInput'); if(!ta) return;
+    var body=(ta.value||'').trim(); if(!body){ ta.focus(); return; }
+    if(body.length>1000){ alert('댓글은 1000자 이내로 작성해 주세요.'); return; }
+    try{ sb.from('board_comments').insert({ post_id:String(postId), body:body }).then(function(res){
+      if(res.error){ console.warn('[댓글] 저장 경고:', res.error.message); alert('댓글 저장에 실패했습니다.'); return; }
+      ta.value=''; window.loadComments(postId);
+    }); }catch(e){ console.warn('[댓글] 저장 예외:', e&&e.message); }
+  };
+  window.delComment = function(cid, postId){
+    var sb=sbc(); if(!sb) return;
+    if(typeof canDeleteBoard==='function' && !canDeleteBoard()){ if(typeof permPopup==='function')permPopup(); return; }
+    try{ sb.from('board_comments').delete().eq('id',cid).then(function(res){
+      if(res.error){ console.warn('[댓글] 삭제 경고:', res.error.message); return; }
+      window.loadComments(postId);
+    }); }catch(e){ console.warn('[댓글] 삭제 예외:', e&&e.message); }
+  };
+
+  /* ────────── viewPost 래핑: 조회자 기록 + 조회자 툴팁 + 댓글 UI 주입 ────────── */
+  if(typeof window.viewPost==='function'){
+    var _vp=window.viewPost;
+    window.viewPost=function(k,id){
+      _vp.apply(this,arguments);   /* 원본: 모달 렌더 + 조회수 bump */
+      try{
+        /* ① 공지: 조회수 span에 조회자 툴팁 부착 + 기록 */
+        if(k==='notice'){
+          var vc=document.getElementById('viewCountNum');
+          if(vc && vc.parentNode){
+            vc.parentNode.id='viewerTip';
+            vc.parentNode.setAttribute('data-pid', String(id));
+            vc.parentNode.style.cursor='help';
+            vc.parentNode.setAttribute('title','읽은 사람 불러오는 중…');
+          }
+          recordView(id);   /* 내 조회 기록 후 목록 갱신 */
+        }
+        /* ② 익명 자유게시판: 모달 하단에 댓글 영역 주입 */
+        if(k==='free'){
+          var box=document.getElementById('modalBox');
+          if(box && !document.getElementById('cmtSection')){
+            var sec=document.createElement('div');
+            sec.id='cmtSection'; sec.style.marginTop='16px';
+            sec.innerHTML=''
+              +'<div style="font-size:12px;font-weight:700;color:var(--ink2);margin-bottom:6px;">'
+              +'<i class="fa-regular fa-comment"></i> 댓글 <span id="cmtCount">(0)</span></div>'
+              +'<div id="cmtList" style="max-height:34vh;overflow:auto;border:1px solid var(--line);border-radius:10px;background:var(--surface-2);"></div>'
+              +'<div style="display:flex;gap:6px;margin-top:8px;">'
+              +'<textarea id="cmtInput" class="inp" rows="2" placeholder="익명으로 댓글 작성" style="flex:1;resize:vertical;"></textarea>'
+              +'<button class="btn" style="white-space:nowrap;" onclick="addComment(\''+String(id)+'\')">등록</button></div>';
+            /* 닫기 버튼 그룹 앞에 삽입 (없으면 modalBox 끝) */
+            var closeBtnRow=box.querySelector('div[style*="margin-top:16px"]');
+            if(closeBtnRow && closeBtnRow.parentNode===box) box.insertBefore(sec, closeBtnRow);
+            else box.appendChild(sec);
+            window.loadComments(id);
+          }
+        }
+      }catch(e){ console.warn('[게시판 확장] viewPost 경고:', e&&e.message); }
+    };
+  }
+
+  /* ────────── 목록 제목 옆 댓글 수 (N) — 자유게시판 행에 부착 ────────── */
+  window.__cmtCounts = window.__cmtCounts || {};
+  function loadAllCommentCounts(){
+    var sb=sbc(); if(!sb || typeof DATA==='undefined' || !DATA.free) return;
+    try{ sb.from('board_comments').select('post_id').then(function(res){
+      if(res.error){ console.warn('[댓글수] 경고:', res.error.message); return; }
+      var cnt={}; (res.data||[]).forEach(function(r){ cnt[r.post_id]=(cnt[r.post_id]||0)+1; });
+      window.__cmtCounts=cnt;
+      if(typeof renderFree==='function') renderFree();
+      var al=document.getElementById('boardAllList'); if(al && typeof renderBoardAll==='function') renderBoardAll('free');
+    }); }catch(e){ console.warn('[댓글수] 예외:', e&&e.message); }
+  }
+  window.__loadAllCommentCounts = loadAllCommentCounts;
+
+  /* boardRowHTML 래핑: 자유게시판 제목 옆에 (N) 추가 */
+  if(typeof window.boardRowHTML==='function'){
+    var _brh=window.boardRowHTML;
+    window.boardRowHTML=function(k,p){
+      var html=_brh.apply(this,arguments);
+      if(k==='free'){
+        var n=window.__cmtCounts[p.id]||0;
+        /* 제목 span 뒤에 (N) 배지 삽입 */
+        var badge='<span class="cmt-badge" style="color:var(--t4);font-weight:700;font-size:11px;margin-left:4px;">('+n+')</span>';
+        html=html.replace('</span>'+( '' ), '</span>');  /* no-op 안전 */
+        /* b-tw 닫힘 직전에 배지 삽입: b-title span 다음 */
+        html=html.replace(/(<span class="b-tw">.*?<\/span>)/, '$1'+badge);
+      }
+      return html;
+    };
+  }
+
+  /* 게시판 로드 완료 후 댓글수 로딩 (loadBoard가 있으면 그 뒤에) */
+  function kickCommentCounts(){ try{ loadAllCommentCounts(); }catch(e){} }
+  if(document.readyState==='loading') document.addEventListener('DOMContentLoaded', function(){ setTimeout(kickCommentCounts, 1500); });
+  else setTimeout(kickCommentCounts, 1500);
+
+  /* ────────── ③ 시스템관리자 전용: 전체보기 내 기간별 일괄삭제 ────────── */
+  function isSysAdmin(){ try{ return DATA.role==='system_admin'; }catch(e){ return false; } }
+
+  /* openBoardAll 래핑: 시스템관리자면 검색창 아래에 기간삭제 패널 주입 */
+  if(typeof window.openBoardAll==='function'){
+    var _oba=window.openBoardAll;
+    window.openBoardAll=function(k){
+      _oba.apply(this,arguments);   /* 원본: 전체보기 모달 */
+      try{
+        if(!isSysAdmin()) return;
+        var box=document.getElementById('modalBox'); if(!box) return;
+        if(document.getElementById('bulkDelPanel')) return;
+        var listEl=document.getElementById('boardAllList'); if(!listEl) return;
+        var today=new Date();
+        var toStr=today.getFullYear()+'-'+('0'+(today.getMonth()+1)).slice(-2)+'-'+('0'+today.getDate()).slice(-2);
+        var ago=new Date(today.getTime()-30*24*60*60*1000);
+        var fromStr=ago.getFullYear()+'-'+('0'+(ago.getMonth()+1)).slice(-2)+'-'+('0'+ago.getDate()).slice(-2);
+        var panel=document.createElement('div');
+        panel.id='bulkDelPanel';
+        panel.style.cssText='margin:10px 0;padding:10px 12px;border:1px solid #fecaca;background:#fef2f2;border-radius:10px;';
+        panel.innerHTML=''
+          +'<div style="font-size:11.5px;font-weight:800;color:#b91c1c;margin-bottom:7px;"><i class="fa-solid fa-triangle-exclamation"></i> 시스템관리자 · 기간별 일괄삭제</div>'
+          +'<div style="display:flex;gap:6px;align-items:center;flex-wrap:wrap;font-size:12px;">'
+          +'<input type="date" id="bulkFrom" class="inp" value="'+fromStr+'" style="flex:1;min-width:120px;">'
+          +'<span style="color:var(--muted);">~</span>'
+          +'<input type="date" id="bulkTo" class="inp" value="'+toStr+'" style="flex:1;min-width:120px;">'
+          +'<button class="btn" style="background:#dc2626;color:#fff;white-space:nowrap;" onclick="bulkDeleteBoard(\''+k+'\')"><i class="fa-solid fa-trash"></i> 기간 삭제</button></div>'
+          +'<div style="font-size:10.5px;color:#7f1d1d;margin-top:6px;">선택 기간에 작성된 글과 첨부파일·댓글이 모두 영구 삭제됩니다.</div>';
+        listEl.parentNode.insertBefore(panel, listEl);
+      }catch(e){ console.warn('[일괄삭제] 패널 경고:', e&&e.message); }
+    };
+  }
+
+  window.bulkDeleteBoard = function(k){
+    var sb=sbc(); if(!sb){ alert('서버 연결이 필요합니다.'); return; }
+    if(!isSysAdmin()){ if(typeof permPopup==='function')permPopup(); return; }
+    var fromEl=document.getElementById('bulkFrom'), toEl=document.getElementById('bulkTo');
+    var fromV=fromEl&&fromEl.value, toV=toEl&&toEl.value;
+    if(!fromV || !toV){ alert('시작일과 종료일을 모두 선택해 주세요.'); return; }
+    if(fromV>toV){ alert('시작일이 종료일보다 늦습니다.'); return; }
+    /* 종료일 포함: 다음날 00:00 미만 조건으로 */
+    var toNext=new Date(toV+'T00:00:00'); toNext.setDate(toNext.getDate()+1);
+    var fromISO=new Date(fromV+'T00:00:00').toISOString();
+    var toISO=toNext.toISOString();
+    var kindLabel=(k==='notice'?'공지':'익명게시판');
+
+    /* 1) 해당 기간·종류의 글을 먼저 조회 (첨부 path 수집용) */
+    sb.from('board_posts').select('id,attach').eq('kind',k).gte('created_at',fromISO).lt('created_at',toISO).then(function(res){
+      if(res.error){ alert('대상 조회 실패: '+res.error.message); return; }
+      var rows=res.data||[];
+      if(!rows.length){ alert('선택 기간에 삭제할 '+kindLabel+' 글이 없습니다.'); return; }
+      var ids=rows.map(function(r){ return r.id; });
+      var paths=[];
+      rows.forEach(function(r){ (r.attach||[]).forEach(function(a){ if(a&&a.path) paths.push(a.path); }); });
+
+      if(typeof modal==='function'){
+        modal('<div style="text-align:center;"><div style="font-size:34px;">🗑️</div>'
+          +'<h3 style="justify-content:center;">기간 일괄삭제 확인</h3>'
+          +'<p style="color:var(--ink2);font-size:13px;line-height:1.7;"><b>'+kindLabel+'</b> · <b>'+fromV+' ~ '+toV+'</b><br>'
+          +'글 <b style="color:#dc2626;">'+ids.length+'건</b>'+(paths.length?(' · 첨부 <b>'+paths.length+'개</b>'):'')+'을(를) 영구 삭제합니다.<br>되돌릴 수 없습니다.</p>'
+          +'<div style="display:flex;gap:8px;margin-top:8px;">'
+          +'<button class="btn ghost" style="flex:1;" onclick="closeModal()">취소</button>'
+          +'<button class="btn" style="flex:1;background:#dc2626;color:#fff;" onclick="__doBulkDelete(\''+k+'\')">삭제 실행</button></div></div>');
+        window.__bulkDelCtx={ k:k, ids:ids, paths:paths, kindLabel:kindLabel };
+      }
+    });
+  };
+
+  window.__doBulkDelete = function(k){
+    var sb=sbc(); var ctx=window.__bulkDelCtx; if(!sb || !ctx) return;
+    var ids=ctx.ids, paths=ctx.paths;
+    /* 2) 첨부파일 Storage 삭제 (있으면) */
+    function afterFiles(){
+      /* 3) board_posts 삭제 */
+      sb.from('board_posts').delete().in('id',ids).then(function(res){
+        if(res.error){ alert('글 삭제 실패: '+res.error.message); return; }
+        /* 4) 딸린 조회기록·댓글 정리 (post별 purge) */
+        try{ ids.forEach(function(pid){ sb.rpc('purge_board_post',{ p_id:String(pid) }); }); }catch(e){}
+        /* 5) 메모리에서도 제거 + 재렌더 */
+        try{
+          if(k==='notice') DATA.notices=(DATA.notices||[]).filter(function(p){ return ids.indexOf(p.id)<0; });
+          else DATA.free=(DATA.free||[]).filter(function(p){ return ids.indexOf(p.id)<0; });
+          if(typeof renderNotices==='function') renderNotices();
+          if(typeof renderFree==='function') renderFree();
+        }catch(e){}
+        if(typeof closeModal==='function') closeModal();
+        if(typeof modal==='function') modal('<div style="text-align:center;"><div style="font-size:34px;">✅</div><h3 style="justify-content:center;">삭제 완료</h3><p style="color:var(--ink2);">'+ids.length+'건이 삭제되었습니다.</p><button class="btn" style="width:100%;margin-top:6px;" onclick="closeModal()">확인</button></div>');
+        window.__bulkDelCtx=null;
+      });
+    }
+    if(sb.storage && paths && paths.length){
+      sb.storage.from('board-attachments').remove(paths).then(function(res){
+        if(res && res.error) console.warn('[일괄삭제] 첨부 삭제 경고:', res.error.message);
+        afterFiles();
+      });
+    } else { afterFiles(); }
+  };
 })();
 </script>
 </body>
