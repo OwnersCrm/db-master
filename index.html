@@ -308,6 +308,11 @@ section.sec{scroll-margin-top:150px;}
 .r-item{display:flex;justify-content:space-between;align-items:center;font-size:12.5px;background:var(--surface-2);
   padding:9px 13px;border-radius:8px;border:1px solid var(--line);margin-bottom:8px;}
 .r-item .rf{font-weight:400;color:var(--muted);font-size:11.5px;}
+.recruit-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
+.recruit-grid .r-item{margin-bottom:0;}
+.recruit-more{margin-top:10px;width:100%;padding:8px 0;font-size:12.5px;font-weight:700;color:var(--navy);background:var(--surface-2);border:1px solid var(--line);border-radius:8px;cursor:pointer;transition:background .15s;}
+.recruit-more:hover{background:#eef1f6;}
+@media (max-width:520px){ .recruit-grid{grid-template-columns:1fr;} }
 .head-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;}
 .head-item{display:flex;justify-content:space-between;align-items:center;font-size:12px;background:#fff;
   padding:8px 11px;border-radius:7px;border:1px solid var(--line);}
@@ -1169,13 +1174,37 @@ function renderPromoAllPage(){
 }
 function promoPage(d){ _promoView.page+=d; renderPromoAllPage(); }
 function renderRecruit(){
-  el('recruitList').innerHTML = DATA.recruits.map(function(r){var t=teamById(r.team);
-    return '<div class="r-item"><span><b>'+r.name+'</b> <span class="rf">(도입: '+r.ref+')</span></span><span style="color:'+t.color+';font-weight:800;">'+t.name+'</span></div>';}).join('');
+  /* v36.0.52: 2열 그리드 + 최대 10명 표시, 초과 시 전체보기 버튼 */
+  var all = DATA.recruits || [];
+  var MAX = 10;
+  var shown = all.slice(0, MAX);
+  function itemHTML(r){ var t=teamById(r.team);
+    return '<div class="r-item"><span><b>'+r.name+'</b> <span class="rf">(도입: '+r.ref+')</span></span><span style="color:'+t.color+';font-weight:800;">'+t.name+'</span></div>';
+  }
+  var gridHTML = '<div class="recruit-grid">'+ shown.map(itemHTML).join('') +'</div>';
+  var moreHTML = (all.length > MAX)
+    ? '<button class="recruit-more" onclick="showAllRecruits()">전체보기 ('+all.length+'명) <i class="fa-solid fa-chevron-down" style="font-size:10px;"></i></button>'
+    : '';
+  el('recruitList').innerHTML = all.length ? (gridHTML + moreHTML)
+    : '<div style="text-align:center;color:var(--muted);font-size:12.5px;padding:14px;">당월 신규 입사자가 없습니다.</div>';
+
   var tot=0;
   el('headcountList').innerHTML = DATA.teams.map(function(t){tot+=t.head;
     var d=t.delta>0?'<span style="color:var(--ok);">+'+t.delta+'명</span>':t.delta<0?'<span style="color:var(--danger);">'+t.delta+'명</span>':'<span style="color:var(--muted);">-</span>';
     return '<div class="head-item"><span style="color:'+t.color+';font-weight:800;">'+t.name+' ('+t.head+'명)</span>'+d+'</div>';}).join('');
   el('totalHead').textContent = tot;
+}
+/* v36.0.52: 신규입사자 전체보기 모달 */
+function showAllRecruits(){
+  var all = (DATA.recruits || []);
+  var body = all.map(function(r){ var t=teamById(r.team);
+    return '<div class="r-item"><span><b>'+r.name+'</b> <span class="rf">(도입: '+r.ref+')</span></span><span style="color:'+t.color+';font-weight:800;">'+t.name+'</span></div>';
+  }).join('');
+  if(typeof modal==='function'){
+    modal('<div class="card-title" style="margin-bottom:12px;"><i class="fa-solid fa-seedling" style="color:var(--t2);"></i> 당월 신규 입사자 <span class="sub">('+all.length+'명)</span></div>'
+      +'<div class="recruit-grid" style="max-height:60vh;overflow:auto;">'+body+'</div>'
+      +'<button class="btn" style="width:100%;margin-top:14px;" onclick="closeModal()">닫기</button>');
+  }
 }
 function renderWorkshop(){
   el('workshopCards').innerHTML = DATA.teams.map(function(t){
@@ -3190,7 +3219,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.51';
+  var VER='v36.0.52';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
