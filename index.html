@@ -2346,6 +2346,15 @@ updateTeamBtn();
   function computeSeasonRev(recs, year, months){
     // v36.0.45: 쉐어 반영. isRealShareMember는 다른 스코프라 참조 불가 → 인라인(_rsm)로 대체(isExternal은 스코프 내).
     function _rsm(p){ p=String(p||'').trim(); return !!p && p!=='선택' && p!=='회사' && p!=='SM' && p!=='시스템관리자' && !isExternal(p); }
+    // v36.0.53: 청철/실효 이중 방어 — 계약이 조금이라도 청철이면 쉐어 크레딧 전면 차단(레거시 데이터 isLapsed 누락 대비).
+    //   버그: 청철건인데 c.isLapsed 플래그가 누락되면 쉐어자에게 취소분이 실적으로 잘못 크레딧됨(박정익 97만원 사고).
+    function _contractLapsed(c, d){
+      if(!c) return true;
+      if(c.isLapsed) return true;                                   /* 개별 계약 청철 */
+      if(String((d&&d.status)||'').trim()==='청철/실효') return true; /* DB 상태 청철 */
+      if(c.lapseType || c.lapseDate) return true;                   /* 청철 흔적(플래그 누락 대비) */
+      return false;
+    }
     var rev={}, team={};
     (recs||[]).forEach(function(d){
       if(!d || d.is_frozen) return;
@@ -2353,12 +2362,13 @@ updateTeamBtn();
       var owner=d.member; if(!owner) return;
       var tk=teamKey(d.team); team[owner]=tk;
       getDBContracts(d).forEach(function(c){
-        if(!c || c.isLapsed) return;
+        if(_contractLapsed(c, d)) return;                           /* 청철 계약 스킵(쉐어 크레딧도 차단) */
         var pm=parseYM(c.date||d.date); if(pm.y!==year || months.indexOf(pm.m)<0) return;
         var total=safeNum(c.totalAmount||c.amount); if(total<=0) return;   // 0원 계약 제외
         var ded=0;
         (c.shareList||[]).forEach(function(s){
           var amt=safeNum(s&&s.amount); if(amt<=0) return; var p=s&&s.partner;
+          if(s&&s.isLapsed) return;                                 /* 쉐어 항목 자체 청철이면 제외 */
           if(isExternal(p)||_rsm(p)) ded+=amt;                            /* 외부+실제멤버 쉐어는 원주인서 차감 */
           if(_rsm(p)){ rev[p]=(rev[p]||0)+amt; team[p]=team[p]||tk; }      /* 쉐어받은 멤버 크레딧 */
         });
@@ -2940,6 +2950,14 @@ updateTeamBtn();
 
   /* 쉐어 반영 멤버 집계: 원주인 순수실적 + 쉐어받은 멤버 가상 entry */
   function computeShare(recs, y, m, isAll){
+    // v36.0.53: 청철/실효 이중 방어 (computeSeasonRev와 동일 정책) — 레거시 isLapsed 누락 대비.
+    function _contractLapsed(c, d){
+      if(!c) return true;
+      if(c.isLapsed) return true;
+      if(String((d&&d.status)||'').trim()==='청철/실효') return true;
+      if(c.lapseType || c.lapseDate) return true;
+      return false;
+    }
     var rev={}, ct={}, team={}, realCount=0, shareCount=0;
     (recs||[]).forEach(function(d){
       if(!d || d.is_frozen) return;
@@ -2948,12 +2966,13 @@ updateTeamBtn();
       var tk=teamKey(d.team); team[owner]=tk;
       var shareSeen={};
       getDBContracts(d).forEach(function(c){
-        if(!c || c.isLapsed) return;
+        if(_contractLapsed(c, d)) return;
         var cd=c.date||d.date; if(!ymMatch(cd,y,m,isAll)) return;
         var pm=parseYM(cd), mk=pm.y+'-'+pm.m;
         var total=safeNum(c.totalAmount||c.amount), ded=0;
         (c.shareList||[]).forEach(function(s){
           var amt=safeNum(s&&s.amount); if(amt<=0) return; var p=s&&s.partner;
+          if(s&&s.isLapsed) return;                                 /* 쉐어 항목 자체 청철이면 제외 */
           if(isExternal(p)||isRealShareMember(p)) ded+=amt;          /* 외부+실제멤버 쉐어는 원주인서 차감 */
           if(isRealShareMember(p)){                                  /* 실제멤버는 가상 entry로 +반영 */
             rev[p]=(rev[p]||0)+amt; team[p]=team[p]||tk;
@@ -3219,7 +3238,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.52';
+  var VER='v36.0.53';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
