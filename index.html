@@ -2147,9 +2147,36 @@ updateTeamBtn();
     if(Array.isArray(d.contracts)&&d.contracts.length)return d.contracts;
     if(d.raw&&Array.isArray(d.raw.contracts)&&d.raw.contracts.length)return d.raw.contracts;
     return []; }
-  function teamKey(t){ return ({'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'})[t]||null; }
+  /* v36.0.58 [팀 확장 대비] 1~4팀은 기존 매핑 그대로. 5팀 이상('N팀')도 자동으로 tN 인식.
+     그래도 못 읽는 팀 이름은 null 반환 + 1회 경고 (통계에서 조용히 사라지지 않도록). */
+  var _teamKeyWarned={};
+  function teamKey(t){
+    var s=String(t==null?'':t).trim(); if(!s) return null;
+    var m=({'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'})[s]; if(m) return m;
+    var g=s.match(/^(\d{1,2})팀$/); if(g) return 't'+parseInt(g[1],10);
+    if(!_teamKeyWarned[s]){ _teamKeyWarned[s]=true;
+      console.warn('[v36.0.58 팀 매핑] 알 수 없는 팀 이름 → 통계 제외됨:', s); }
+    return null;
+  }
   function srcKey(s){ if(s==='회사DB')return '회사 DB'; if(s==='개인DB')return '개인 DB'; return '기타 DB'; } /* 기타/추장호/팀/null→기타 */
   function blank(){ return {assigned:0,mt:0,ct:0,rev:0}; }
+
+  /* ---- v36.0.56 [Q2] 쉐어 팀귀속 ----------------------------------------------
+     대원칙: 쉐어분은 '쉐어받은 사람의 소속 팀' 매출 (원주인 팀이 아님).
+     우선순위: app_users 매핑(_memberTeam) → 이미 잡힌 값(prev) → 원주인 팀(tk, 기존 동작 폴백).
+     매핑이 없으면(미로그인·RLS 차단·app_users 미등록) 기존과 100% 동일하게 동작 + 1회 경고. */
+  /* v36.0.57: 실제 팀원 쉐어자 판별 (computeSeasonRev 내부 _rsm과 동일 정책, 스코프 공용화) */
+  function _realShareMember(p){ p=String(p||'').trim();
+    return !!p && p!=='선택' && p!=='회사' && p!=='SM' && p!=='시스템관리자' && !isExternal(p); }
+  var _shareTeamWarned={};
+  function _shareTeamOf(p, prev, tk){
+    var mt=null;
+    try{ mt=(typeof _memberTeam!=='undefined'&&_memberTeam)||window.__memberTeam||null; }catch(_e){ mt=null; }
+    if(mt && mt[p]) return mt[p];
+    if(mt && !_shareTeamWarned[p]){ _shareTeamWarned[p]=true;
+      console.warn('[v36.0.56 쉐어 팀귀속] app_users에 없는 쉐어자 → 원주인 팀으로 폴백:', p); }
+    return prev || tk;
+  }
 
   /* db_records → STATS (선택 연/월) */
   function compute(recs, year, month, isAll){
@@ -2203,16 +2230,32 @@ updateTeamBtn();
   function computeMonthly(recs, year){
     var byTeam={t1:new Array(12).fill(0),t2:new Array(12).fill(0),t3:new Array(12).fill(0),t4:new Array(12).fill(0)};
     var ctTeam={t1:new Array(12).fill(0),t2:new Array(12).fill(0),t3:new Array(12).fill(0),t4:new Array(12).fill(0)};
+    /* v36.0.58 [팀 확장 대비] 5팀 이상이 들어와도 크래시 없이 집계되도록 행을 동적 생성 */
+    function _row(tk){ if(!byTeam[tk]) byTeam[tk]=new Array(12).fill(0);
+                       if(!ctTeam[tk]) ctTeam[tk]=new Array(12).fill(0); return tk; }
     (recs||[]).forEach(function(d){
       if(d.is_frozen) return;
       if(normStatus(d.status)!=='계약') return;
-      var tk=teamKey(d.team); if(!tk) return;
+      var tk=teamKey(d.team); if(!tk) return; _row(tk);
       getDBContracts(d).forEach(function(c){
         if(c.isLapsed) return;
         var p=parseYM(c.date||d.date); if(p.y!==year || p.m<1 || p.m>12) return;
         var amt=safeNum(c.totalAmount||c.amount);
         if(amt<=0) return;   // v36.0.43: 0원으로 입력된 계약은 매출·계약건수 집계 제외
-        (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
+        /* v36.0.57 [Q1·Q2] 팀 매출 쉐어 반영
+           · 외부(회사·N팀) 쉐어 → 원주인 팀에서 차감 (v36.0.56 이전과 100% 동일)
+           · 실제 팀원 쉐어     → 원주인 팀에서 차감 + '쉐어받은 사람의 소속팀'으로 가산
+           · 매핑 없으면 _shareTeamOf가 원주인 팀을 돌려주므로 차감·가산이 상쇄 → 기존 동작 유지 */
+        (c.shareList||[]).forEach(function(s2){
+          var sa=safeNum(s2&&s2.amount); if(sa<=0) return;
+          var p2=s2&&s2.partner;
+          if(isExternal(p2)){ amt-=sa; return; }            /* 기존 동작 보존 */
+          if(s2&&s2.isLapsed) return;                       /* 쉐어 항목 자체 청철 → 차감·크레딧 모두 없음 */
+          if(!_realShareMember(p2)) return;                 /* 선택/SM/시스템관리자 등은 무시 */
+          amt-=sa;
+          var stk=_shareTeamOf(p2, null, tk);
+          byTeam[_row(stk)][p.m-1]+=sa;   /* v36.0.58: 받는 팀 행이 없으면 동적 생성 */
+        });
         byTeam[tk][p.m-1]+=amt;
         ctTeam[tk][p.m-1]+=1;   /* 팀별 월별 계약건수 */
       });
@@ -2234,6 +2277,8 @@ updateTeamBtn();
         _memberTeam={};
         var u=await sb.from('app_users').select('name,team');
         (u.data||[]).forEach(function(r){ if(r.name) _memberTeam[r.name]=teamKey(r.team); });
+        /* v36.0.56 [Q2]: 쉐어 보정 등 다른 스코프에서도 '동일한' name→team 매핑을 쓰도록 공개(단일 진실 원천) */
+        try{ window.__memberTeam=_memberTeam; }catch(_e){}
       }
       // monthly_goals 로드 (RLS 권한 내에서만 — 세션 필요)
       var g=await sb.from('monthly_goals').select('member_name,year,month,amount');
@@ -2380,7 +2425,7 @@ updateTeamBtn();
           var amt=safeNum(s&&s.amount); if(amt<=0) return; var p=s&&s.partner;
           if(s&&s.isLapsed) return;                                 /* 쉐어 항목 자체 청철이면 제외 */
           if(isExternal(p)||_rsm(p)) ded+=amt;                            /* 외부+실제멤버 쉐어는 원주인서 차감 */
-          if(_rsm(p)){ rev[p]=(rev[p]||0)+amt; team[p]=team[p]||tk; }      /* 쉐어받은 멤버 크레딧 */
+          if(_rsm(p)){ rev[p]=(rev[p]||0)+amt; team[p]=_shareTeamOf(p, team[p], tk); }  /* 쉐어받은 멤버 크레딧 */
         });
         rev[owner]=(rev[owner]||0)+Math.max(0,total-ded);                 /* 원주인 순수실적 */
       });
@@ -2991,7 +3036,17 @@ updateTeamBtn();
     var p=String(s).match(/(\d{4})[.\-\/]\s?(\d{1,2})/); return p?{y:+p[1],m:+p[2]}:{y:0,m:0}; }
   function ymMatch(s,y,m,isAll){ var p=parseYM(s); if(!p.y||p.y!==y)return false; return isAll?true:p.m===m; }
   function isExternal(n){ if(!n)return false; if(n==='회사')return true; return /\d.*팀/.test(n); }
-  function teamKey(t){ return ({'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'})[t]||null; }
+  /* v36.0.58 [팀 확장 대비] 1~4팀은 기존 매핑 그대로. 5팀 이상('N팀')도 자동으로 tN 인식.
+     그래도 못 읽는 팀 이름은 null 반환 + 1회 경고 (통계에서 조용히 사라지지 않도록). */
+  var _teamKeyWarned={};
+  function teamKey(t){
+    var s=String(t==null?'':t).trim(); if(!s) return null;
+    var m=({'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'})[s]; if(m) return m;
+    var g=s.match(/^(\d{1,2})팀$/); if(g) return 't'+parseInt(g[1],10);
+    if(!_teamKeyWarned[s]){ _teamKeyWarned[s]=true;
+      console.warn('[v36.0.58 팀 매핑] 알 수 없는 팀 이름 → 통계 제외됨:', s); }
+    return null;
+  }
   function getDBContracts(d){ var st=String(d.status||'').trim();
     if(st!=='계약'&&st!=='청철/실효')return [];
     if(Array.isArray(d.contracts)&&d.contracts.length)return d.contracts;
@@ -3000,6 +3055,16 @@ updateTeamBtn();
   /* v35 _isRealShareMember: 선택/회사/SM/시스템관리자 제외한 실제 멤버만 쉐어자로 인정 */
   function isRealShareMember(p){ p=String(p||'').trim();
     return !!p && p!=='선택' && p!=='회사' && p!=='SM' && p!=='시스템관리자' && !isExternal(p); }
+  /* v36.0.56 [Q2] 쉐어 팀귀속 — stats-engine과 동일 정책(별도 스코프라 동형 복제).
+     우선순위: app_users 매핑(window.__memberTeam) → 이미 잡힌 값 → 원주인 팀(기존 동작 폴백). */
+  var _shareTeamWarned2={};
+  function _shareTeamOf(p, prev, tk){
+    var mt=null; try{ mt=window.__memberTeam||null; }catch(_e){ mt=null; }
+    if(mt && mt[p]) return mt[p];
+    if(mt && !_shareTeamWarned2[p]){ _shareTeamWarned2[p]=true;
+      console.warn('[v36.0.56 쉐어 팀귀속] app_users에 없는 쉐어자 → 원주인 팀으로 폴백:', p); }
+    return prev || tk;
+  }
   function getSel(){ var y=parseInt((document.getElementById('selYear')||{}).value||'2026',10)||2026;
     var mv=(document.getElementById('selMonth')||{}).value||'all'; var isAll=(mv==='all');
     return {y:y, m:isAll?null:parseInt(mv,10), isAll:isAll}; }
@@ -3031,7 +3096,7 @@ updateTeamBtn();
           if(s&&s.isLapsed) return;                                 /* 쉐어 항목 자체 청철이면 제외 */
           if(isExternal(p)||isRealShareMember(p)) ded+=amt;          /* 외부+실제멤버 쉐어는 원주인서 차감 */
           if(isRealShareMember(p)){                                  /* 실제멤버는 가상 entry로 +반영 */
-            rev[p]=(rev[p]||0)+amt; team[p]=team[p]||tk;
+            rev[p]=(rev[p]||0)+amt; team[p]=_shareTeamOf(p, team[p], tk);   /* v36.0.56 [Q2] 받은 사람 소속팀 */
             shareSeen[p]=shareSeen[p]||{};
             if(!shareSeen[p][mk]){ shareSeen[p][mk]=true; ct[p]=(ct[p]||0)+1; shareCount++; }  /* 같은달 다중=1건 */
           }
@@ -3299,7 +3364,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.55';
+  var VER='v36.0.59';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3758,22 +3823,54 @@ updateTeamBtn();
   /* [연간 차트 확장] 원본은 1~6월만 표시(months 6개 하드코딩 + injectRace가 slice(0,6)).
      현재월까지(과거연도는 12개월) 표시하도록: computeMonthly를 복제해 월별 매출 재산출 →
      차트 렌더 시에만 curM/prevM을 전체월 배열로 스왑(race 등 다른 렌더는 6개월 유지, 영향 0). */
-  function teamKey(t){ return ({'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'})[t]||null; }
+  /* v36.0.58 [팀 확장 대비] 1~4팀은 기존 매핑 그대로. 5팀 이상('N팀')도 자동으로 tN 인식.
+     그래도 못 읽는 팀 이름은 null 반환 + 1회 경고 (통계에서 조용히 사라지지 않도록). */
+  var _teamKeyWarned={};
+  function teamKey(t){
+    var s=String(t==null?'':t).trim(); if(!s) return null;
+    var m=({'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'})[s]; if(m) return m;
+    var g=s.match(/^(\d{1,2})팀$/); if(g) return 't'+parseInt(g[1],10);
+    if(!_teamKeyWarned[s]){ _teamKeyWarned[s]=true;
+      console.warn('[v36.0.58 팀 매핑] 알 수 없는 팀 이름 → 통계 제외됨:', s); }
+    return null;
+  }
   function isExternal(n){ if(!n)return false; if(n==='회사')return true; return /\d.*팀/.test(n); }
   function getDBContracts(d){ var st=String(d.status||'').trim(); if(st!=='계약'&&st!=='청철/실효')return [];
     if(Array.isArray(d.contracts)&&d.contracts.length)return d.contracts;
     if(d.raw&&Array.isArray(d.raw.contracts)&&d.raw.contracts.length)return d.raw.contracts; return []; }
+  /* v36.0.59 [Q1·Q2] 연간차트 쉐어 반영용 — stats-engine과 동일 정책(별도 스코프라 동형 복제) */
+  function _realShareMemberF(p){ p=String(p||'').trim();
+    return !!p && p!=='선택' && p!=='회사' && p!=='SM' && p!=='시스템관리자' && !isExternal(p); }
+  var _shareTeamWarnedF={};
+  function _shareTeamOfF(p, tk){
+    var mt=null; try{ mt=window.__memberTeam||null; }catch(_e){ mt=null; }
+    if(mt && mt[p]) return mt[p];
+    if(mt && !_shareTeamWarnedF[p]){ _shareTeamWarnedF[p]=true;
+      console.warn('[v36.0.59 연간차트 쉐어 팀귀속] app_users에 없는 쉐어자 → 원주인 팀으로 폴백:', p); }
+    return tk;
+  }
   function computeMonthlyFull(recs, year){
     var byTeam={t1:new Array(12).fill(0),t2:new Array(12).fill(0),t3:new Array(12).fill(0),t4:new Array(12).fill(0)};
+    /* v36.0.58 [팀 확장 대비] 5팀 이상 행 동적 생성 */
+    function _rowF(tk){ if(!byTeam[tk]) byTeam[tk]=new Array(12).fill(0); return tk; }
     (recs||[]).forEach(function(d){
       if(d.is_frozen) return;
       if(normStatus(d.status)!=='계약') return;
-      var tk=teamKey(d.team); if(!tk) return;
+      var tk=teamKey(d.team); if(!tk) return; _rowF(tk);
       getDBContracts(d).forEach(function(c){
         if(c.isLapsed) return;
         var p=parseYM(c.date||d.date); if(p.y!==year||p.m<1||p.m>12) return;
         var amt=safeNum2(c.totalAmount||c.amount);
-        (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum2(s2.amount)>0) amt-=safeNum2(s2.amount); });
+        /* v36.0.59 [Q1·Q2] 연간차트 쉐어 반영 — computeMonthly(v36.0.57)와 동일 정책 */
+        (c.shareList||[]).forEach(function(s2){
+          var sa=safeNum2(s2&&s2.amount); if(sa<=0) return;
+          var p2=s2&&s2.partner;
+          if(isExternal(p2)){ amt-=sa; return; }            /* 외부(회사·N팀) — 기존 동작 보존 */
+          if(s2&&s2.isLapsed) return;                       /* 쉐어 항목 자체 청철 → 차감·크레딧 없음 */
+          if(!_realShareMemberF(p2)) return;                /* 실제 팀원만 */
+          amt-=sa;
+          byTeam[_rowF(_shareTeamOfF(p2, tk))][p.m-1]+=sa;  /* 받은 사람 소속팀으로 가산 */
+        });
         byTeam[tk][p.m-1]+=amt;
       });
     });
