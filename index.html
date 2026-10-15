@@ -2521,7 +2521,18 @@ updateTeamBtn();
       if(!window.__dbRecords || window.__dbRecords.length===0){   /* [v22] 빈 캐시면 재시도 허용 */
         var all=[], from=0, size=1000, hadError=false;
         while(true){
-          var r=await sb.from('db_records').select('*').range(from, from+size-1);
+          /* v36.0.61 [통계 전용 뷰 전환]
+             기존: db_records 를 통째로 읽어 통계를 계산 → 고객 개인정보(업체명·대표자·전화)까지 브라우저로 내려왔고,
+                   RLS 로 조회를 좁히면 팀원은 본인 담당분만 받아 전사 통계가 전부 틀어졌다(2026-10-15 회귀).
+             변경: 개인정보를 뺀 통계 전용 뷰(db_records_stats)를 읽는다.
+                   → 팀원도 전사 통계를 정상으로 보면서 고객 신원은 못 본다.
+             폴백: 뷰가 아직 없거나 권한이 없으면 기존 db_records 로 되돌아간다(배포 순서 사고 방지). */
+          var r=await sb.from('db_records_stats').select('*').range(from, from+size-1);
+          if(r.error){
+            console.warn('[2-4c] 통계 뷰(db_records_stats) 사용 불가 → db_records 폴백:', r.error.message);
+            console.warn('[2-4c] ⚠ 뷰를 먼저 생성해야 합니다. RLS 가 좁혀진 상태에서 이 폴백이 걸리면 통계가 틀어집니다.');
+            r = await sb.from('db_records').select('*').range(from, from+size-1);
+          }
           if(r.error){ hadError=true; console.error('[2-4c] ⚠ db_records 조회 실패:', r.error.message, '— RLS 권한 또는 세션 문제일 수 있습니다.'); break; }
           all=all.concat(r.data||[]);
           if(!r.data || r.data.length<size) break;
@@ -3364,7 +3375,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.60';
+  var VER='v36.0.61';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
