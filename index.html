@@ -1773,7 +1773,7 @@ updateTeamBtn();
   /* [v16 / 2-4b] app_users 실데이터 → 당월 신규입사자 + 팀별 인원/증감 + 팀 SM 이름 */
   async function loadPeople(){
     try{
-      var r = await sb.from('app_users').select('name,team,role,status,referrer,joined_at,is_new');
+      var r = await sb.from('app_users_directory').select('name,team,role,status,referrer,joined_at,is_new');
       if(r.error){ console.warn('[2-4b] app_users 조회 실패:', r.error.message); return; }
       var users = r.data || [];
       var teamMap = {'1팀':'t1','2팀':'t2','3팀':'t3','4팀':'t4'};
@@ -1947,7 +1947,7 @@ updateTeamBtn();
            name 변수를 재할당하므로 이후 INSERT·안내 문구가 자동으로 새 이름을 사용. */
         if(!isBoot){
           try{
-            var _st = await sb.from('app_users').select('name').eq('team', bTeam);
+            var _st = await sb.from('app_users_directory').select('name').eq('team', bTeam);
             if(_st.data && _st.data.length){
               var _used = _st.data.map(function(u){ return u.name; });
               if(_used.indexOf(name) >= 0){
@@ -2275,7 +2275,7 @@ updateTeamBtn();
       // member → team 매핑 (app_users)
       if(!_memberTeam){
         _memberTeam={};
-        var u=await sb.from('app_users').select('name,team');
+        var u=await sb.from('app_users_directory').select('name,team');
         (u.data||[]).forEach(function(r){ if(r.name) _memberTeam[r.name]=teamKey(r.team); });
         /* v36.0.56 [Q2]: 쉐어 보정 등 다른 스코프에서도 '동일한' name→team 매핑을 쓰도록 공개(단일 진실 원천) */
         try{ window.__memberTeam=_memberTeam; }catch(_e){}
@@ -3375,7 +3375,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.61';
+  var VER='v36.0.62';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -3661,7 +3661,7 @@ updateTeamBtn();
   async function loadReps(){
     try{
       if(!window.sbClient || !window.DATA || !window.DATA.teams) return;
-      var r = await window.sbClient.from('app_users').select('name,team,role,status');
+      var r = await window.sbClient.from('app_users_directory').select('name,team,role,status');
       if(r.error){ console.warn('[팀대표] 조회 실패:', r.error.message); return; }
       var sm = {}, bm = {};
       (r.data||[]).forEach(function(u){
@@ -3957,7 +3957,7 @@ updateTeamBtn();
     try{
       var sbc=window.sbClient; if(!sbc) return;
       var selY=parseInt((document.getElementById('selYear')||{}).value||String(kstNow().getFullYear()),10);
-      var u=await sbc.from('app_users').select('name,team');
+      var u=await sbc.from('app_users_directory').select('name,team');
       var mt={}; (u.data||[]).forEach(function(r){ if(r.name) mt[r.name]=tk2(r.team); });
       var g=await sbc.from('monthly_goals').select('member_name,year,month,amount');
       var mx={t1:{},t2:{},t3:{},t4:{}};
