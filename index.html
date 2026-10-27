@@ -3407,7 +3407,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.64';
+  var VER='v36.0.65';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -4562,6 +4562,74 @@ main .card:hover{
      파일 맨 뒤인 이 리스너가 가장 나중에 실행돼 '가장 바깥'이 된다. */
   if (document.readyState !== 'loading') attach();
   else document.addEventListener('DOMContentLoaded', attach);
+})();
+</script>
+<!-- ===== [v36.0.65] 게시판 첨부 비공개 대응 — 화면에 보일 때 '공개 주소'를 '임시 주소(signed URL)'로 교체 =====
+     · 저장된 첨부 데이터(url·img·path)는 한 글자도 바꾸지 않음 → 과거 글·새 글 모두 자동 적용
+     · 상세보기·작성/수정 창·이미지 확대·다운로드 링크 등 화면에 공개주소가 나타나는 순간 감지(MutationObserver)
+     · 버킷이 공개든 비공개든 동작 → 이 버전 배포 후에 버킷을 비공개로 바꾸면 끊김 없음
+     · 임시 주소 유효 1시간, 같은 파일은 55분간 재사용. 실패 시 원래 주소 유지 + 콘솔 경고(조용히 넘기지 않음)
+     롤백: 이 블록만 삭제 -->
+<script id="board-signed-url">
+(function(){
+  var MARK='/storage/v1/object/public/board-attachments/';
+  var URL_RE=/https?:\/\/[^'"\s)<>]+\/storage\/v1\/object\/public\/board-attachments\/[^'"\s)<>]+/g;
+  var SEL='[src*="'+MARK+'"],[href*="'+MARK+'"],[onclick*="'+MARK+'"]';
+  var _cache={};   /* path → {url, exp} */
+
+  function pathOf(u){
+    var s=String(u||''), i=s.indexOf(MARK); if(i<0) return null;
+    var p=s.slice(i+MARK.length).split('?')[0].split('#')[0];
+    try{ p=decodeURIComponent(p); }catch(e){}
+    return p||null;
+  }
+  async function signPaths(paths){
+    var sb=window.sbClient, out={}, now=Date.now(), need=[];
+    paths.forEach(function(p){ var c=_cache[p]; if(c && c.exp>now+5*60*1000) out[p]=c.url; else if(need.indexOf(p)<0) need.push(p); });
+    if(!need.length) return out;
+    if(!sb || !sb.storage){ console.warn('[첨부 임시주소] 연결 없음 — 원래 주소 유지'); return out; }
+    try{
+      var r=await sb.storage.from('board-attachments').createSignedUrls(need, 3600);
+      if(r && r.error) console.warn('[첨부 임시주소] 발급 실패:', r.error.message);
+      ((r && r.data) || []).forEach(function(x){
+        if(x && x.path && x.signedUrl && !x.error){ _cache[x.path]={url:x.signedUrl, exp:now+3600*1000}; out[x.path]=x.signedUrl; }
+        else if(x && x.error) console.warn('[첨부 임시주소] 파일 없음/권한 없음:', x.path, x.error);
+      });
+    }catch(e){ console.warn('[첨부 임시주소] 예외:', e && e.message); }
+    return out;
+  }
+  async function signIn(root){
+    var els=[];
+    if(root.matches && root.matches(SEL)) els.push(root);
+    if(root.querySelectorAll) Array.prototype.push.apply(els, root.querySelectorAll(SEL));
+    if(!els.length) return;
+    var paths=[];
+    els.forEach(function(el){ ['src','href','onclick'].forEach(function(at){
+      var v=el.getAttribute(at); if(!v) return;
+      (v.match(URL_RE)||[]).forEach(function(u){ var p=pathOf(u); if(p && paths.indexOf(p)<0) paths.push(p); });
+    }); });
+    if(!paths.length) return;
+    var map=await signPaths(paths);
+    els.forEach(function(el){ ['src','href','onclick'].forEach(function(at){
+      var v=el.getAttribute(at); if(!v || v.indexOf(MARK)<0) return;
+      var nv=v.replace(URL_RE, function(u){ var p=pathOf(u); return (p && map[p]) ? map[p] : u; });
+      if(nv!==v) el.setAttribute(at, nv);
+    }); });
+  }
+  window.__signBoardAttachIn = signIn;   /* 수동 점검용 */
+
+  function start(){
+    if(!document.body || !window.MutationObserver) return;
+    try{ signIn(document.body); }catch(e){}
+    var mo=new MutationObserver(function(muts){
+      muts.forEach(function(m){
+        if(m.type==='attributes'){ var t=m.target; var v=t.getAttribute && t.getAttribute(m.attributeName); if(v && v.indexOf(MARK)>=0) signIn(t).catch(function(){}); return; }
+        Array.prototype.forEach.call(m.addedNodes||[], function(n){ if(n.nodeType===1) signIn(n).catch(function(e){ console.warn('[첨부 임시주소] 교체 경고:', e && e.message); }); });
+      });
+    });
+    mo.observe(document.body, {childList:true, subtree:true, attributes:true, attributeFilter:['src','href','onclick']});
+  }
+  if(document.readyState!=='loading') start(); else document.addEventListener('DOMContentLoaded', start);
 })();
 </script>
 </body>
