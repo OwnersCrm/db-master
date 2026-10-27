@@ -3407,7 +3407,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.65';
+  var VER='v36.0.66';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
@@ -4564,7 +4564,7 @@ main .card:hover{
   else document.addEventListener('DOMContentLoaded', attach);
 })();
 </script>
-<!-- ===== [v36.0.65] 게시판 첨부 비공개 대응 — 화면에 보일 때 '공개 주소'를 '임시 주소(signed URL)'로 교체 =====
+<!-- ===== [v36.0.65 · v36.0.66 다운로드명] 게시판 첨부 비공개 대응 — 화면에 보일 때 '공개 주소'를 '임시 주소(signed URL)'로 교체 =====
      · 저장된 첨부 데이터(url·img·path)는 한 글자도 바꾸지 않음 → 과거 글·새 글 모두 자동 적용
      · 상세보기·작성/수정 창·이미지 확대·다운로드 링크 등 화면에 공개주소가 나타나는 순간 감지(MutationObserver)
      · 버킷이 공개든 비공개든 동작 → 이 버전 배포 후에 버킷을 비공개로 바꾸면 끊김 없음
@@ -4613,6 +4613,12 @@ main .card:hover{
     els.forEach(function(el){ ['src','href','onclick'].forEach(function(at){
       var v=el.getAttribute(at); if(!v || v.indexOf(MARK)<0) return;
       var nv=v.replace(URL_RE, function(u){ var p=pathOf(u); return (p && map[p]) ? map[p] : u; });
+      /* v36.0.66 대장님 요청: 다운로드 버튼(<a download>)은 '보기'가 아니라 '저장'되게 — 임시주소에 download=원래파일명 추가.
+         (다른 사이트 주소에서는 브라우저가 download 속성을 무시해 이미지가 새 창으로 열리던 문제. 이미지 미리보기 src에는 붙이지 않음) */
+      if(at==='href' && nv!==v && el.hasAttribute && el.hasAttribute('download') && nv.indexOf('download=')<0){
+        var dn=(el.getAttribute('download')||'').trim();
+        nv += (nv.indexOf('?')>=0 ? '&' : '?') + 'download=' + encodeURIComponent(dn);
+      }
       if(nv!==v) el.setAttribute(at, nv);
     }); });
   }
