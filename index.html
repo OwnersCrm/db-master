@@ -2208,6 +2208,34 @@ updateTeamBtn();
         var amt=safeNum(c.totalAmount||c.amount);
         (c.shareList||[]).forEach(function(s2){ if(isExternal(s2.partner)&&safeNum(s2.amount)>0) amt-=safeNum(s2.amount); });
         inflow[skEff].ct++; inflow[skEff].rev+=amt; if(tk){ cell(skEff,tk).ct++; cell(skEff,tk).rev+=amt; } }); }
+      /* v36.0.63 [Q5 대장 확정 2026-10-23] 쉐어 계약 건수 — 참여 팀원 각자 +1 (타팀 포함, 각자 소속 팀으로).
+         · DB 배정 수(assigned)·매출(rev)은 위 원주인 기준 그대로 — 건수(ct)만 추가
+         · KPI 계약건수(computeShare)와 같은 기준: 실제 팀원 · 쉐어금액>0 · 쉐어항목 청철 아님 · 같은 DB·같은 달 중복 1건 */
+      if(st==='계약'){ var _q5Seen={};
+        getDBContracts(d).forEach(function(c){
+          if(c.isLapsed) return; var cd=c.date||d.date; if(!ymMatch(cd,year,month,isAll)) return;
+          var pm=parseYM(cd), mk=pm.y+'-'+pm.m;
+          (c.shareList||[]).forEach(function(s){
+            var p=s&&s.partner; if(!_realShareMember(p) || safeNum(s&&s.amount)<=0 || (s&&s.isLapsed)) return;
+            var key=String(p).trim()+'|'+mk; if(_q5Seen[key]) return; _q5Seen[key]=true;
+            inflow[skEff].ct++;
+            var ptk=_shareTeamOf(String(p).trim(), null, tk); if(ptk) cell(skEff,ptk).ct++;
+          });
+        }); }
+      /* v36.0.64 [대장 승인 2026-10-27] 팀별 DB 현황 '매출'도 팀 레이스(computeMonthly)와 같은 기준:
+         실제 팀원 쉐어분은 원주인 팀 카드에서 빼고 받은 사람 팀 카드로 옮김. 출처별 합계(inflow.rev)는 불변.
+         조건은 computeMonthly와 동일: 외부 아님 · 실제 팀원 · 쉐어금액>0 · 쉐어항목 청철 아님 · 계약 청철 아님 · 0원 계약 제외 */
+      if(st==='계약' && tk){
+        getDBContracts(d).forEach(function(c){
+          if(c.isLapsed) return; var cd=c.date||d.date; if(!ymMatch(cd,year,month,isAll)) return;
+          if(safeNum(c.totalAmount||c.amount)<=0) return;
+          (c.shareList||[]).forEach(function(s){
+            var p=s&&s.partner, sa=safeNum(s&&s.amount);
+            if(sa<=0 || isExternal(p) || (s&&s.isLapsed) || !_realShareMember(p)) return;
+            var rtk=_shareTeamOf(String(p).trim(), null, tk);
+            if(rtk && rtk!==tk){ cell(skEff,tk).rev-=sa; cell(skEff,rtk).rev+=sa; }
+          });
+        }); }
     });
     return {ready:true, year:year, month:month, isAll:isAll,
       grossRevenue:gross, contractCount:contractCount, lapseCount:lapseCount, lapseAmount:lapseAmount,
@@ -2237,6 +2265,7 @@ updateTeamBtn();
       if(d.is_frozen) return;
       if(normStatus(d.status)!=='계약') return;
       var tk=teamKey(d.team); if(!tk) return; _row(tk);
+      var _q5mSeen={};   /* v36.0.64 [Q5] DB별 쉐어 참여자 월 중복 방지 */
       getDBContracts(d).forEach(function(c){
         if(c.isLapsed) return;
         var p=parseYM(c.date||d.date); if(p.y!==year || p.m<1 || p.m>12) return;
@@ -2255,6 +2284,9 @@ updateTeamBtn();
           amt-=sa;
           var stk=_shareTeamOf(p2, null, tk);
           byTeam[_row(stk)][p.m-1]+=sa;   /* v36.0.58: 받는 팀 행이 없으면 동적 생성 */
+          /* v36.0.64 [Q5] 우승배너 '계약 N건'도 쉐어 참여자 각자 +1 (같은 DB·같은 달 같은 사람은 1건) */
+          var _q5k=String(p2).trim()+'|'+p.m;
+          if(!_q5mSeen[_q5k]){ _q5mSeen[_q5k]=true; ctTeam[_row(stk)][p.m-1]+=1; }
         });
         byTeam[tk][p.m-1]+=amt;
         ctTeam[tk][p.m-1]+=1;   /* 팀별 월별 계약건수 */
@@ -3375,7 +3407,7 @@ updateTeamBtn();
 <!-- ===== [버전 표기] auth-version 텍스트를 현재 버전으로 치환 (원본 0 삭제, 작업마다 셋째자리 증가) ===== -->
 <script>
 (function(){
-  var VER='v36.0.62';
+  var VER='v36.0.64';
   function setVer(){ try{
     document.querySelectorAll('.auth-version').forEach(function(e){ e.textContent=VER; });
     var ph=document.getElementById('login-phone'); if(ph) ph.placeholder='휴대폰 번호 (010-1234-5678)';  /* "예: " 제거 - 잘림 방지 */
